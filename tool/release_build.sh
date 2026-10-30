@@ -27,6 +27,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
 FLUTTER="${FLUTTER:-/tmp/flutter/bin/flutter}"
+# JDK 17 用于绕过 JDK 21 + AGP JdkImageTransform/jlink 已知问题
+JDK17_HOME="${JDK17_HOME:-$HOME/.dsh/jdk/jdk-17.0.21+9/Contents/Home}"
 
 # --- 颜色输出 ---
 RED='\033[0;31m'
@@ -64,6 +66,9 @@ prepare_dist() {
 build_android() {
   info "=== 打包 Android (APK, release) ==="
   cd "$PROJECT_ROOT"
+  # JDK 21 + AGP 的 JdkImageTransform/jlink 已知问题：切换到 JDK 17 编译
+  export JAVA_HOME="$JDK17_HOME"
+  export PATH="$JAVA_HOME/bin:$PATH"
   if ! "$FLUTTER" build apk --release; then
     warn "Android Gradle 构建失败"
     return 1
@@ -100,10 +105,43 @@ build_ios() {
 build_macos() {
   info "=== 打包 macOS (release) ==="
   cd "$PROJECT_ROOT"
+
+  # macOS entitlements 含 app-sandbox / application-groups，需要代码签名证书。
+  # 构建时临时替换为简化版（不含需签名的 key），构建完成后恢复原文件，
+  # 既能打包出产物，又不破坏原 entitlements（小组件 App Group 等功能不受影响）。
+  local ent_debug="$PROJECT_ROOT/macos/Runner/DebugProfile.entitlements"
+  local ent_release="$PROJECT_ROOT/macos/Runner/Release.entitlements"
+  local ent_bak_debug="$PROJECT_ROOT/macos/Runner/DebugProfile.entitlements.bak"
+  local ent_bak_release="$PROJECT_ROOT/macos/Runner/Release.entitlements.bak"
+  local ent_simple='<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD plist 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+</dict>
+</plist>
+'
+
+  cp "$ent_debug" "$ent_bak_debug"
+  cp "$ent_release" "$ent_bak_release"
+  printf '%s' "$ent_simple" > "$ent_debug"
+  printf '%s' "$ent_simple" > "$ent_release"
+
   if ! "$FLUTTER" build macos --release; then
+    # 恢复原文件
+    cp "$ent_bak_debug" "$ent_debug"
+    cp "$ent_bak_release" "$ent_release"
+    rm -f "$ent_bak_debug" "$ent_bak_release"
     warn "macOS 构建失败"
     return 1
   fi
+
+  # 恢复原 entitlements
+  cp "$ent_bak_debug" "$ent_debug"
+  cp "$ent_bak_release" "$ent_release"
+  rm -f "$ent_bak_debug" "$ent_bak_release"
+
   local app="$PROJECT_ROOT/build/macos/Build/Products/Release/deepseek_monitor.app"
   if [[ -d "$app" ]]; then
     cp -r "$app" "$DIST_DIR/DeepSeekMonitor-macOS.app"
@@ -117,6 +155,10 @@ build_macos() {
 # --- Linux ---
 build_linux() {
   info "=== 打包 Linux (release bundle) ==="
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    warn "Linux 构建仅在 Linux 主机支持（当前：$(uname -s)），跳过。请在 Linux 主机上运行本脚本。"
+    return 1
+  fi
   cd "$PROJECT_ROOT"
   if ! "$FLUTTER" build linux --release; then
     warn "Linux 构建失败"
@@ -135,6 +177,11 @@ build_linux() {
 # --- Windows ---
 build_windows() {
   info "=== 打包 Windows (release) ==="
+  local host_os="$(uname -s)"
+  if [[ "$host_os" != "MINGW"* && "$host_os" != "MSYS"* && "$host_os" != "CYGWIN"* ]]; then
+    warn "Windows 构建仅在 Windows 主机支持（当前：$host_os），跳过。请在 Windows 主机上运行本脚本。"
+    return 1
+  fi
   cd "$PROJECT_ROOT"
   if ! "$FLUTTER" build windows --release; then
     warn "Windows 构建失败"
