@@ -160,14 +160,52 @@ build_macos() {
     warn "macOS App 未找到: $app"
     return 1
   fi
-  # 打成交付用的 dmg（UDZO 压缩），拖进 Applications 即可运行。
+
+  # dmg 里放三样东西，做成标准的拖拽安装盘：
+  #   1. App 本体（重命名成带空格的可读名字，Finder 里一眼能认）
+  #   2. /Applications 的符号链接 —— 用户把 App 拖上去就算装完
+  #   3. 安装说明 —— 未签名 App 会被 Gatekeeper 拦，不告诉用户怎么放行就是废盘
+  local stage
+  stage="$(mktemp -d)"
+  cp -R "$app" "$stage/DeepSeek Monitor.app"
+  ln -s /Applications "$stage/Applications"
+
+  cat > "$stage/安装说明.txt" <<'MACOS_INSTALL_NOTE'
+DeepSeek Monitor · macOS 安装说明
+=================================
+
+1. 把左边的「DeepSeek Monitor」拖到右边的 Applications（应用程序）文件夹。
+2. 打开「应用程序」文件夹，找到 DeepSeek Monitor，双击运行。
+
+第一次打开被系统拦住了？
+-------------------------
+本版本没有 Apple 公证（需要付费开发者账号签名），macOS 会提示
+「无法打开，因为无法验证开发者」。三种放行方式任选一种：
+
+  a) 右键点 App → 选「打开」→ 弹窗里再点「打开」（只需一次）。
+  b) 系统设置 → 隐私与安全性 → 底部点「仍要打开」。
+  c) 终端执行：
+     xattr -dr com.apple.quarantine "/Applications/DeepSeek Monitor.app"
+
+连接方式
+---------
+· API Key 模式：填 api.deepseek.com 的 Key。走公开接口查余额，Web 端也能用。
+· 平台令牌模式：登录 platform.deepseek.com 后从 Cookie 里取令牌。
+  仅桌面端可用 —— 平台站有 WAF，浏览器跨域拿不到。
+
+项目主页：https://github.com/lucky845/deepseek-monitor
+MACOS_INSTALL_NOTE
+
+  # UDZO = 只读 + zlib 压缩：体积小，双击即挂载。
   local dmg="$DIST_DIR/DeepSeekMonitor-macOS.dmg"
   rm -f "$dmg"
-  if ! hdiutil create -quiet -volname "DeepSeek Monitor" -srcfolder "$app" -ov -format UDZO "$dmg"; then
+  if ! hdiutil create -quiet -volname "DeepSeek Monitor" -srcfolder "$stage" -ov -format UDZO "$dmg"; then
+    rm -rf "$stage"
     warn "macOS dmg 打包失败"
     return 1
   fi
-  info "macOS dmg -> dist/DeepSeekMonitor-macOS.dmg"
+  rm -rf "$stage"
+  info "macOS dmg -> dist/DeepSeekMonitor-macOS.dmg（含 Applications 快捷方式与安装说明）"
 }
 
 # --- Linux ---
