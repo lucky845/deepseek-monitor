@@ -202,7 +202,7 @@ tool/                      本地反代与真接口自检
 |---|---|
 | Android | `dist/deepseek_monitor-android.apk` |
 | iOS | `dist/DeepSeekMonitor-iOS.ipa`（未签名，装真机需重签名） |
-| macOS | `dist/DeepSeekMonitor-macOS.dmg` |
+| macOS | `dist/DeepSeekMonitor-macOS.dmg`（内含 Applications 快捷方式与安装说明，拖拽即装） |
 | Linux | `dist/deepseek_monitor-linux/`（bundle） |
 | Windows | `dist/deepseek_monitor-windows.exe` |
 
