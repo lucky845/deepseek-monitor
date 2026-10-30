@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">余额、今日花费和请求数，取自应用最后一次刷新。</string>
+    <string name="widget_small_description">余额和今日花费，只放扫一眼就要知道的两个数。</string>
+    <string name="widget_mini_description">余额和今日花费，两条线看完，不占地方。</string>
+</resources>
