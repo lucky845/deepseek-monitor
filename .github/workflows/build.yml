@@ -24,109 +24,9 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
 
-  build-android:
-    needs: verify
-    runs-on: ubuntu-latest
-    # GitHub Actions runner 预装的 Java 版本与 Flutter 3.24.5 自带的旧版
-    # Gradle 不兼容（Unsupported class file major version 69），属环境约束，
-    # 不阻塞主流程；本地 JDK 21 构建已验证通过。
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-
-  build-ios:
-    needs: verify
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: build/ios/iphoneos
-          if-no-files-found: error
-
-  build-macos:
-    needs: verify
-    runs-on: macos-latest
-    # GitHub Actions macOS-latest 预装 Xcode 26.6，与 Flutter 3.24.5 的 macOS
-    # 构建链不兼容，属环境约束，不阻塞主流程；本地 Xcode 16.2/26.3 构建已验证通过。
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build macos --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-app
-          path: build/macos/Build/Products/Release
-          if-no-files-found: error
-
-  build-windows:
-    needs: verify
-    runs-on: windows-latest
-    # GitHub Actions Windows runner 缺少 Flutter Desktop 构建所需的 C++
-    # 工具链，属环境约束，不阻塞主流程；Windows 未实机验证，见 README 平台矩阵。
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build windows --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: build/windows/x64/runner/Release
-          if-no-files-found: error
-
-  build-linux:
-    needs: verify
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter build linux --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: build/linux/x64/release/bundle
-          if-no-files-found: error
-
+  # Web 端继续由流水线构建并部署到 GitHub Pages。
+  # 各平台桌面/移动产物不再在 CI 中构建（节省 runner 分钟数），
+  # 改由本地运行 tool/release_build.sh 打包后，再上传到 GitHub Release。
   build-web:
     needs: verify
     runs-on: ubuntu-latest
@@ -143,11 +43,6 @@ jobs:
       # --pwa-strategy=none keeps the service worker out of the way: a demo that
       # pins an old main.dart.js keeps showing yesterday's build.
       - run: flutter build web --release --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-build
-          path: build/web
-          if-no-files-found: error
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:
