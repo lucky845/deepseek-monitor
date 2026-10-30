@@ -103,14 +103,19 @@ flutter run -d chrome  # 网页端
 
 ### 各平台构建
 
+所有平台产物统一由本地脚本打包，输出到 `dist/` 目录，方便一次性上传到 GitHub Release：
+
 ```bash
-flutter build apk --release        # Android
-flutter build ios --release        # iOS（需要自己的签名团队）
-flutter build macos --release      # macOS
-flutter build windows --release    # Windows
-flutter build linux --release      # Linux
-flutter build web --release        # Web
+./tool/release_build.sh            # 全平台打包（Android / iOS / macOS / Linux / Windows）
+./tool/release_build.sh android    # 仅 Android APK
+./tool/release_build.sh ios        # 仅 iOS（模拟器，--no-codesign）
+./tool/release_build.sh macos      # 仅 macOS App
+./tool/release_build.sh linux      # 仅 Linux bundle
+./tool/release_build.sh windows    # 仅 Windows EXE
+./tool/release_build.sh clean      # 清理 dist/ 和 build/
 ```
+
+Web 端不在脚本中处理，由 GitHub Actions 构建并部署到 GitHub Pages（`https://blog.lucky845.top/deepseek-monitor/`）。
 
 环境要求与模拟器调试步骤见 [docs/development.md](docs/development.md)——里面有 Mac 上装 CocoaPods、起 Android 模拟器、装 iOS 模拟器这些容易卡住的细节。
 
@@ -185,15 +190,25 @@ tool/                      本地反代与真接口自检
 
 ## 打包
 
-`.github/workflows/build.yml` 一次产出六个平台的产物：
+各平台桌面/移动产物不再在 GitHub Actions 中构建，改由本地脚本打包：
 
-1. `verify` — 先跑 `flutter analyze` 与 `flutter test`，不绿就不打包
-2. `build-android` / `build-ios` / `build-macos` / `build-windows` / `build-linux` / `build-web` — 各自 upload-artifact
-3. `deploy-web` — 发布到 GitHub Pages（仓库 Settings → Pages 里把 Source 设为 "GitHub Actions"）
+```bash
+./tool/release_build.sh            # 全平台打包，产物在 dist/
+```
 
-Web 产物按项目页子路径构建（`--base-href /<repo>/`），并关掉 Service Worker：一个会缓存旧 `main.dart.js` 的演示站，第二天看到的还是前一天的结果。
+产物收集到 `dist/` 目录，可直接上传到 GitHub Release：
 
-Linux 构建需要 `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev`，工作流里已装好。
+| 平台 | 产物 |
+|---|---|
+| Android | `dist/deepseek_monitor-android.apk` |
+| iOS | `dist/DeepSeekMonitor-iOS.app/` |
+| macOS | `dist/DeepSeekMonitor-macOS.app/` |
+| Linux | `dist/deepseek_monitor-linux/`（bundle） |
+| Windows | `dist/deepseek_monitor-windows.exe` |
+
+Web 端继续由 GitHub Actions 构建并部署到 GitHub Pages（`https://blog.lucky845.top/deepseek-monitor/`），按项目页子路径构建（`--base-href /<repo>/`），并关掉 Service Worker。
+
+Linux 构建需要 `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev`。
 
 ## 文档
 
