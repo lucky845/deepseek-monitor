@@ -64,13 +64,17 @@ prepare_dist() {
 build_android() {
   info "=== 打包 Android (APK, release) ==="
   cd "$PROJECT_ROOT"
-  "$FLUTTER" build apk --release
+  if ! "$FLUTTER" build apk --release; then
+    warn "Android Gradle 构建失败"
+    return 1
+  fi
   local apk="$PROJECT_ROOT/build/app/outputs/flutter-apk/app-release.apk"
   if [[ -f "$apk" ]]; then
     cp "$apk" "$DIST_DIR/deepseek_monitor-android.apk"
     info "Android APK -> dist/deepseek_monitor-android.apk"
   else
     warn "Android APK 未找到: $apk"
+    return 1
   fi
 }
 
@@ -78,13 +82,17 @@ build_android() {
 build_ios() {
   info "=== 打包 iOS (模拟器, release, --no-codesign) ==="
   cd "$PROJECT_ROOT"
-  "$FLUTTER" build ios --release --no-codesign
+  if ! "$FLUTTER" build ios --release --no-codesign; then
+    warn "iOS 构建失败"
+    return 1
+  fi
   local app="$PROJECT_ROOT/build/ios/iphoneos/Runner.app"
   if [[ -d "$app" ]]; then
     cp -r "$app" "$DIST_DIR/DeepSeekMonitor-iOS.app"
     info "iOS App -> dist/DeepSeekMonitor-iOS.app"
   else
     warn "iOS App 未找到: $app"
+    return 1
   fi
 }
 
@@ -92,13 +100,17 @@ build_ios() {
 build_macos() {
   info "=== 打包 macOS (release) ==="
   cd "$PROJECT_ROOT"
-  "$FLUTTER" build macos --release
+  if ! "$FLUTTER" build macos --release; then
+    warn "macOS 构建失败"
+    return 1
+  fi
   local app="$PROJECT_ROOT/build/macos/Build/Products/Release/deepseek_monitor.app"
   if [[ -d "$app" ]]; then
     cp -r "$app" "$DIST_DIR/DeepSeekMonitor-macOS.app"
     info "macOS App -> dist/DeepSeekMonitor-macOS.app"
   else
     warn "macOS App 未找到: $app"
+    return 1
   fi
 }
 
@@ -106,13 +118,17 @@ build_macos() {
 build_linux() {
   info "=== 打包 Linux (release bundle) ==="
   cd "$PROJECT_ROOT"
-  "$FLUTTER" build linux --release
+  if ! "$FLUTTER" build linux --release; then
+    warn "Linux 构建失败"
+    return 1
+  fi
   local bundle="$PROJECT_ROOT/build/linux/x64/release/bundle"
   if [[ -d "$bundle" ]]; then
     cp -r "$bundle" "$DIST_DIR/deepseek_monitor-linux"
     info "Linux bundle -> dist/deepseek_monitor-linux/"
   else
     warn "Linux bundle 未找到: $bundle"
+    return 1
   fi
 }
 
@@ -120,13 +136,31 @@ build_linux() {
 build_windows() {
   info "=== 打包 Windows (release) ==="
   cd "$PROJECT_ROOT"
-  "$FLUTTER" build windows --release
+  if ! "$FLUTTER" build windows --release; then
+    warn "Windows 构建失败"
+    return 1
+  fi
   local exe="$PROJECT_ROOT/build/windows/x64/runner/Release/deepseek_monitor.exe"
   if [[ -f "$exe" ]]; then
     cp "$exe" "$DIST_DIR/deepseek_monitor-windows.exe"
     info "Windows EXE -> dist/deepseek_monitor-windows.exe"
   else
     warn "Windows EXE 未找到: $exe"
+    return 1
+  fi
+}
+
+# --- 平台构建（失败不中断，记录后继续） ---
+build_platform() {
+  local name="$1"; shift
+  info ">>> 开始构建平台: $name"
+  if "$@"; then
+    info ">>> 平台 $name 构建成功"
+    return 0
+  else
+    local code=$?
+    warn ">>> 平台 $name 构建失败 (exit $code)，跳过，继续下一平台"
+    return $code
   fi
 }
 
@@ -136,37 +170,39 @@ main() {
 
   check_flutter
 
+  local failed=()
+
   case "$target" in
     clean)
       do_clean
       ;;
     all)
       prepare_dist
-      build_android
-      build_ios
-      build_macos
-      build_linux
-      build_windows
+      build_platform android build_android || failed+=("android")
+      build_platform ios build_ios || failed+=("ios")
+      build_platform macos build_macos || failed+=("macos")
+      build_platform linux build_linux || failed+=("linux")
+      build_platform windows build_windows || failed+=("windows")
       ;;
     android)
       prepare_dist
-      build_android
+      build_android || failed+=("android")
       ;;
     ios)
       prepare_dist
-      build_ios
+      build_ios || failed+=("ios")
       ;;
     macos)
       prepare_dist
-      build_macos
+      build_macos || failed+=("macos")
       ;;
     linux)
       prepare_dist
-      build_linux
+      build_linux || failed+=("linux")
       ;;
     windows)
       prepare_dist
-      build_windows
+      build_windows || failed+=("windows")
       ;;
     *)
       error "未知目标: $target"
@@ -176,8 +212,15 @@ main() {
   esac
 
   echo ""
-  info "打包完成。产物目录: $DIST_DIR"
-  ls -lh "$DIST_DIR" 2>/dev/null || true
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    warn "打包部分完成。以下平台失败：${failed[*]}"
+    info "产物目录: $DIST_DIR"
+    ls -lh "$DIST_DIR" 2>/dev/null || true
+    exit 1
+  else
+    info "打包全部完成。产物目录: $DIST_DIR"
+    ls -lh "$DIST_DIR" 2>/dev/null || true
+  fi
 }
 
 main "$@"
