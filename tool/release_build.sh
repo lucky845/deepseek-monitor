@@ -7,18 +7,19 @@
 #       不在此脚本中处理。
 #
 # 用法：
-#   ./tool/release_build.sh              # 全平台打包（Android/iOS/macOS/Linux）
-#   ./tool/release_build.sh android      # 仅打包 Android
-#   ./tool/release_build.sh ios          # 仅打包 iOS（模拟器，--no-codesign）
-#   ./tool/release_build.sh macos        # 仅打包 macOS
-#   ./tool/release_build.sh linux        # 仅打包 Linux
+#   ./tool/release_build.sh              # 全平台打包（Android/iOS/macOS/Linux/Windows）
+#   ./tool/release_build.sh android      # 仅打包 Android  -> dist/*.apk
+#   ./tool/release_build.sh ios          # 仅打包 iOS      -> dist/*.ipa（--no-codesign）
+#   ./tool/release_build.sh macos        # 仅打包 macOS    -> dist/*.dmg
+#   ./tool/release_build.sh linux        # 仅打包 Linux（需 Linux 主机）
+#   ./tool/release_build.sh windows      # 仅打包 Windows（需 Windows 主机）
 #   ./tool/release_build.sh clean        # 清理 dist/ 和 build/
 #
 # 环境要求：
 #   - Flutter SDK 已加入 PATH（或设置 FLUTTER_ROOT）
 #   - iOS/macOS 构建需 Xcode 工具链
-#   - Android 构建需 Android SDK + 兼容的 JDK
-#   - Linux 构建需 clang/cmake/ninja/gtk
+#   - Android 构建需 Android SDK + JDK 17（JDK 21 + AGP 会踩 jlink 坑）
+#   - Linux/Windows 构建必须在对应主机上运行，无法交叉编译
 # =============================================================================
 set -euo pipefail
 
@@ -85,20 +86,32 @@ build_android() {
 
 # --- iOS ---
 build_ios() {
-  info "=== 打包 iOS (模拟器, release, --no-codesign) ==="
+  info "=== 打包 iOS (release, --no-codesign) ==="
   cd "$PROJECT_ROOT"
   if ! "$FLUTTER" build ios --release --no-codesign; then
     warn "iOS 构建失败"
     return 1
   fi
   local app="$PROJECT_ROOT/build/ios/iphoneos/Runner.app"
-  if [[ -d "$app" ]]; then
-    cp -r "$app" "$DIST_DIR/DeepSeekMonitor-iOS.app"
-    info "iOS App -> dist/DeepSeekMonitor-iOS.app"
-  else
+  if [[ ! -d "$app" ]]; then
     warn "iOS App 未找到: $app"
     return 1
   fi
+  # 未签名 ipa：标准 Payload/Runner.app 结构打成 zip 再改后缀名。
+  # 装真机前需要用自己的描述文件重签名（Xcode 或 iReSign 都可以）。
+  local ipa="$DIST_DIR/DeepSeekMonitor-iOS.ipa"
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  mkdir -p "$tmpdir/Payload"
+  cp -r "$app" "$tmpdir/Payload/Runner.app"
+  rm -f "$ipa"
+  if ! ( cd "$tmpdir" && zip -qry "$ipa" Payload ); then
+    rm -rf "$tmpdir"
+    warn "iOS ipa 打包失败"
+    return 1
+  fi
+  rm -rf "$tmpdir"
+  info "iOS ipa -> dist/DeepSeekMonitor-iOS.ipa（未签名，装真机需重签名）"
 }
 
 # --- macOS ---
@@ -143,13 +156,18 @@ build_macos() {
   rm -f "$ent_bak_debug" "$ent_bak_release"
 
   local app="$PROJECT_ROOT/build/macos/Build/Products/Release/deepseek_monitor.app"
-  if [[ -d "$app" ]]; then
-    cp -r "$app" "$DIST_DIR/DeepSeekMonitor-macOS.app"
-    info "macOS App -> dist/DeepSeekMonitor-macOS.app"
-  else
+  if [[ ! -d "$app" ]]; then
     warn "macOS App 未找到: $app"
     return 1
   fi
+  # 打成交付用的 dmg（UDZO 压缩），拖进 Applications 即可运行。
+  local dmg="$DIST_DIR/DeepSeekMonitor-macOS.dmg"
+  rm -f "$dmg"
+  if ! hdiutil create -quiet -volname "DeepSeek Monitor" -srcfolder "$app" -ov -format UDZO "$dmg"; then
+    warn "macOS dmg 打包失败"
+    return 1
+  fi
+  info "macOS dmg -> dist/DeepSeekMonitor-macOS.dmg"
 }
 
 # --- Linux ---

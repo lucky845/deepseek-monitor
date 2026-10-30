@@ -201,8 +201,8 @@ tool/                      本地反代与真接口自检
 | 平台 | 产物 |
 |---|---|
 | Android | `dist/deepseek_monitor-android.apk` |
-| iOS | `dist/DeepSeekMonitor-iOS.app/` |
-| macOS | `dist/DeepSeekMonitor-macOS.app/` |
+| iOS | `dist/DeepSeekMonitor-iOS.ipa`（未签名，装真机需重签名） |
+| macOS | `dist/DeepSeekMonitor-macOS.dmg` |
 | Linux | `dist/deepseek_monitor-linux/`（bundle） |
 | Windows | `dist/deepseek_monitor-windows.exe` |
 
