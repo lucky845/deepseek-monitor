@@ -36,8 +36,9 @@ adb shell am start -n com.deepseekmonitor.deepseek_monitor/.MainActivity
 gem install --user-install ffi -v 1.16.3 --no-document
 gem install --user-install cocoapods -v 1.11.3 --no-document
 
-# 每次调试（$HOME/.gem/ruby/2.6.0/bin 必须在 PATH 里，否则 flutter 找不到 pod）
-export PATH="$HOME/.gem/ruby/2.6.0/bin:/tmp/flutter/bin:$PATH"
+# 每次调试（$HOME/.gem/ruby/2.6.0/bin 必须在 PATH 里，否则 flutter 找不到 pod；
+# flutter 装在 ~/.dsh/flutter）
+export PATH="$HOME/.gem/ruby/2.6.0/bin:$HOME/.dsh/flutter/bin:$PATH"
 flutter run -d macos --debug
 ```
 
@@ -49,7 +50,7 @@ flutter run -d macos --debug
 
 ```bash
 # 一次性准备
-export PATH="/tmp/flutter/bin:$HOME/.gem/ruby/2.6.0/bin:$PATH"
+export PATH="$HOME/.dsh/flutter/bin:$HOME/.gem/ruby/2.6.0/bin:$PATH"
 flutter doctor   # 确认没有 CocoaPods 缺失
 
 # 每次调试：先 build 再装到模拟器

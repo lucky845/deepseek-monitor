@@ -27,7 +27,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
-FLUTTER="${FLUTTER:-/tmp/flutter/bin/flutter}"
+FLUTTER="${FLUTTER:-$HOME/.dsh/flutter/bin/flutter}"
 # JDK 17 用于绕过 JDK 21 + AGP JdkImageTransform/jlink 已知问题
 JDK17_HOME="${JDK17_HOME:-$HOME/.dsh/jdk/jdk-17.0.21+9/Contents/Home}"
 
