@@ -36,9 +36,13 @@ adb shell am start -n com.deepseekmonitor.deepseek_monitor/.MainActivity
 gem install --user-install ffi -v 1.16.3 --no-document
 gem install --user-install cocoapods -v 1.11.3 --no-document
 
-# 每次调试（$HOME/.gem/ruby/2.6.0/bin 必须在 PATH 里，否则 flutter 找不到 pod；
-# flutter 装在 ~/.dsh/flutter）
-export PATH="$HOME/.gem/ruby/2.6.0/bin:$HOME/.dsh/flutter/bin:$PATH"
+# 一次性准备：Flutter 用 Homebrew 装，装完 flutter 命令全局可用。
+# 注意 brew 装的是最新 stable（当前 3.47.x），与 CI 固定的 3.24.5 有版本差；
+# 首次运行会提示升级 pub 依赖，属正常现象。
+brew install --cask flutter
+
+# 每次调试（$HOME/.gem/ruby/2.6.0/bin 必须在 PATH 里，否则 flutter 找不到 pod）
+export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
 flutter run -d macos --debug
 ```
 
@@ -50,7 +54,8 @@ flutter run -d macos --debug
 
 ```bash
 # 一次性准备
-export PATH="$HOME/.dsh/flutter/bin:$HOME/.gem/ruby/2.6.0/bin:$PATH"
+# （Flutter 已通过 brew install --cask flutter 装好，全局可用）
+export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
 flutter doctor   # 确认没有 CocoaPods 缺失
 
 # 每次调试：先 build 再装到模拟器
