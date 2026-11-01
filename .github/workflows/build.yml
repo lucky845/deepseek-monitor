@@ -38,11 +38,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # GitHub Pages serves a project site from /<repo>/, so every asset URL has
-      # to carry that prefix or the deployed page loads a blank canvas.
-      # --pwa-strategy=none keeps the service worker out of the way: a demo that
-      # pins an old main.dart.js keeps showing yesterday's build.
-      - run: flutter build web --release --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/"
+      # 该仓库已配置自定义域名 monitor.lucky845.top，站点部署在根路由 /。
+      # --base-href / 让所有资产从域名根开始加载，不再带 /deepseek-monitor/ 前缀。
+      # --pwa-strategy=none 保证每次部署都是最新构建，不被 Service Worker 缓存旧包。
+      - run: flutter build web --release --pwa-strategy=none --base-href /
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:

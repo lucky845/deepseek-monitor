@@ -14,7 +14,7 @@
 [![Analyze](https://img.shields.io/badge/analyze-0%20issues-2EA043.svg?style=flat-square)](#开发)
 [![Platforms](https://img.shields.io/badge/platforms-android%20%7C%20ios%20%7C%20macos%20%7C%20windows%20%7C%20linux%20%7C%20web-5C6BC0.svg?style=flat-square)](#平台支持)
 
-[在线体验](https://lucky845.github.io/deepseek-monitor/) · [功能](#功能) · [截图](#截图) · [快速开始](#快速开始) · [文档](#文档)
+[在线体验](https://monitor.lucky845.top/) · [功能](#功能) · [截图](#截图) · [快速开始](#快速开始) · [文档](#文档)
 
 </div>
 
@@ -87,7 +87,7 @@ Linux 和 Web 不支持应用内登录，因为 `flutter_inappwebview` 在这两
 
 ### 在线体验
 
-打开 <https://lucky845.github.io/deepseek-monitor/>，不配置任何东西就能看到完整界面（示例数据）。
+打开 <https://monitor.lucky845.top/>，不配置任何东西就能看到完整界面（示例数据）。
 
 想让它显示真实余额，在「连接账号」里填入 **API Key** 即可——`api.deepseek.com` 支持跨域，静态托管上也能直接读。**平台令牌**那一路需要反代，原因见 [docs/web-and-proxy.md](docs/web-and-proxy.md)。
 
@@ -115,7 +115,7 @@ flutter run -d chrome  # 网页端
 ./tool/release_build.sh clean      # 清理 dist/ 和 build/
 ```
 
-Web 端不在脚本中处理，由 GitHub Actions 构建并部署到 GitHub Pages（`https://blog.lucky845.top/deepseek-monitor/`）。
+Web 端不在脚本中处理，由 GitHub Actions 构建并部署到 GitHub Pages（`https://monitor.lucky845.top/`）。
 
 环境要求与模拟器调试步骤见 [docs/development.md](docs/development.md)——里面有 Mac 上装 CocoaPods、起 Android 模拟器、装 iOS 模拟器这些容易卡住的细节。
 
@@ -206,7 +206,7 @@ tool/                      本地反代与真接口自检
 | Linux | `dist/deepseek_monitor-linux/`（bundle） |
 | Windows | `dist/deepseek_monitor-windows.exe` |
 
-Web 端继续由 GitHub Actions 构建并部署到 GitHub Pages（`https://blog.lucky845.top/deepseek-monitor/`），按项目页子路径构建（`--base-href /<repo>/`），并关掉 Service Worker。
+Web 端继续由 GitHub Actions 构建并部署到 GitHub Pages（`https://monitor.lucky845.top/`），按根路由构建（`--base-href /`），并关掉 Service Worker。
 
 Linux 构建需要 `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev`。
 
