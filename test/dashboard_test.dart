@@ -202,9 +202,14 @@ void main() {
     await tester.pump();
 
     await openTab(tester, '用量');
-    // A month is a daily series.
+    // A month is a daily series. 本月的桶数就是"已经过去的天数"，
+    // 今天第几天就显示"几 天"（1 号=1 天、10 号=10 天…），会随日期变，不能写死。
     expect(find.text('每日趋势'), findsOneWidget);
-    expect(find.text('31 天'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) =>
+          w is Text && RegExp(r'^\d+ 天$').hasMatch(w.data ?? '')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('今日'));
     await tester.pumpAndSettle();
@@ -245,21 +250,21 @@ void main() {
     expect(find.text('取消'), findsOneWidget);
 
     final now = DateTime.now();
-    await tester.tap(find.byKey(ValueKey('day-${now.year}-${now.month}-3')));
+    await tester.tap(find.byKey(ValueKey('day-${now.year}-${now.month}-1')));
     await tester.pump();
-    await tester.tap(find.byKey(ValueKey('day-${now.year}-${now.month}-9')));
+    await tester.tap(find.byKey(ValueKey('day-${now.year}-${now.month}-2')));
     await tester.pump();
-    expect(find.textContaining('${now.month} 月 3 日'), findsOneWidget);
+    expect(find.textContaining('${now.month} 月 1 日'), findsOneWidget);
 
     await tester.tap(find.text('确定'));
     await tester.pumpAndSettle();
 
     // The chip now carries the picked window and the calendar is gone.
     expect(find.text('确定'), findsNothing);
-    // DateFormat('MM/dd') pads, so the chip reads "10/03 – 10/09"; the same
+    // DateFormat('MM/dd') pads, so the chip reads "11/01 – 11/02"; the same
     // window also shows up in the KPI notes, hence findsWidgets.
-    expect(find.textContaining('/03'), findsWidgets);
-    expect(find.textContaining('/09'), findsWidgets);
+    expect(find.textContaining('/01'), findsWidgets);
+    expect(find.textContaining('/02'), findsWidgets);
     expect(find.text('自定义'), findsNothing);
   });
 
