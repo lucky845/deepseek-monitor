@@ -36,15 +36,17 @@ adb shell am start -n com.deepseekmonitor.deepseek_monitor/.MainActivity
 gem install --user-install ffi -v 1.16.3 --no-document
 gem install --user-install cocoapods -v 1.11.3 --no-document
 
-# 一次性准备：Flutter 用 Homebrew 装，装完 flutter 命令全局可用。
-# 注意 brew 装的是最新 stable（当前 3.47.x），与 CI 固定的 3.24.5 有版本差；
-# 首次运行会提示升级 pub 依赖，属正常现象。
-brew install --cask flutter
+# 一次性准备：Flutter 用 FVM 锁版本，和 CI 保持同一版（.fvmrc 里声明）
+brew install fvm
+fvm install          # 按 .fvmrc 下载对应 Flutter SDK
+fvm flutter --version
 
 # 每次调试（$HOME/.gem/ruby/2.6.0/bin 必须在 PATH 里，否则 flutter 找不到 pod）
 export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
-flutter run -d macos --debug
+fvm flutter run -d macos --debug
 ```
+
+- 不想装 FVM 也可以 `brew install --cask flutter` 直接用，但 brew 装的是最新 stable，和 CI 固定的 3.24.5 有版本差，`pub get` 会提示升级一批依赖。
 
 - `xcode-select -p` 必须是 `/Applications/Xcode.app/Contents/Developer`。指向 `/Library/Developer/CommandLineTools` 时，gem 的原生扩展编译不出来。
 - 不要用管道判断 gem 是否成功：`gem install ... 2>&1 | tail -40` 的退出码是 `tail` 的，失败也会显示 0。
@@ -54,12 +56,12 @@ flutter run -d macos --debug
 
 ```bash
 # 一次性准备
-# （Flutter 已通过 brew install --cask flutter 装好，全局可用）
+# （Flutter 已由 FVM 按 .fvmrc 装好，用 fvm flutter 调用）
 export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
-flutter doctor   # 确认没有 CocoaPods 缺失
+fvm flutter doctor   # 确认没有 CocoaPods 缺失
 
 # 每次调试：先 build 再装到模拟器
-flutter build ios --simulator --debug
+fvm flutter build ios --simulator --debug
 xcrun simctl boot F2EF2B2A-2D63-4309-9D86-876AB4E690EA   # iPhone 16，iOS 18.3
 xcrun simctl install F2EF2B2A-2D63-4309-9D86-876AB4E690EA build/ios/iphonesimulator/Runner.app
 xcrun simctl launch F2EF2B2A-2D63-4309-9D86-876AB4E690EA com.deepseekmonitor.deepseekMonitor

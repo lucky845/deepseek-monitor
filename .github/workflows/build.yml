@@ -6,19 +6,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  FLUTTER_VERSION: '3.24.5'
-
 jobs:
   # Gate: nothing gets packaged unless analyze and tests are green.
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 版本从 .fvmrc 读，和本地 FVM 用同一份声明，避免 CI 与开发环境漂移。
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          flutter-version-file: .fvmrc
           cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
@@ -34,8 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          flutter-version-file: .fvmrc
           cache: true
       - run: flutter pub get
       # 该仓库已配置自定义域名 monitor.lucky845.top，站点部署在根路由 /。
