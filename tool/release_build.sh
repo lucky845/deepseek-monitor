@@ -27,7 +27,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
-FLUTTER="${FLUTTER:-$HOME/.dsh/flutter/bin/flutter}"
+# 优先用环境变量 FLUTTER；其次从 PATH 找（brew 安装后全局可用）；
+# 兜底常见 Homebrew 前缀。不再依赖任何人的个人目录。
+FLUTTER="${FLUTTER:-$(command -v flutter 2>/dev/null || echo "$(brew --prefix 2>/dev/null)/bin/flutter")}"
 # JDK 17 用于绕过 JDK 21 + AGP JdkImageTransform/jlink 已知问题
 JDK17_HOME="${JDK17_HOME:-$HOME/.dsh/jdk/jdk-17.0.21+9/Contents/Home}"
 
