@@ -96,10 +96,13 @@ Linux 和 Web 不支持应用内登录，因为 `flutter_inappwebview` 在这两
 ```bash
 git clone https://github.com/lucky845/deepseek-monitor.git
 cd deepseek-monitor
-flutter pub get
-flutter run            # 当前平台
-flutter run -d chrome  # 网页端
+brew install fvm && fvm install   # 按 .fvmrc 拉取对应 Flutter 版本
+fvm flutter pub get
+fvm flutter run            # 当前平台
+fvm flutter run -d chrome  # 网页端
 ```
+
+不装 FVM 也行，把上面的 `fvm flutter` 换成系统里的 `flutter` 即可，只是版本可能和 CI 不一致。
 
 ### 各平台构建
 
