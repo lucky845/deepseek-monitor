@@ -17,7 +17,7 @@
 
 **关于这个形象**：DeepSeek 官方**从未推出任何拟人形象**，鲸鱼娘全部来自社区二创。形象设定与出处见 [梗鲸 · DeepSeek娘角色百科](https://aigengtu.com/zh/whale-chan)；主流的女仆鲸鱼娘形象源自画师**上善无形** 2025-06 的 OC「溟月」（CC BY-NC-SA 4.0），女仆装版本由 **ZipZipPipe** 于 2026-04-25 设计（**原作者声明禁止商用**）。本项目是非商业开源工具，使用该形象仅作出处署名与非商业展示；**版权归原作者所有，若原作者有异议，会立即替换为自绘或已授权素材**。
 
-资源文件：`assets/mascot.png`（全身）、`assets/mascot_head.png`（面部裁切，小尺寸用），以及 Android 启动图标（`mipmap-*/ic_launcher.png` 与 adaptive icon 的前景/背景分层）和 Web 图标（`web/favicon.png`、`web/icons/Icon-*.png`）。
+资源文件：`assets/mascot.webp`（全身）、`assets/mascot_head.webp`（面部裁切，小尺寸用），以及 Android 启动图标（`mipmap-*/ic_launcher.png` 与 adaptive icon 的前景/背景分层）和 Web 图标（`web/favicon.png`、`web/icons/Icon-*.png`）。
 
 颜色只承担两件事：`kAccent` 表示「这是你的真实数据」，`kWarn` 表示「这是示例」；每个展示示例数据的面板都带「示例」标签。
 

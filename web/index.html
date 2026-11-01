@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,6 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="让大肥鱼帮你看住钱包：余额、用量、花了多少钱，一眼就懂。">
   <meta name="theme-color" content="#0B1020">
 
@@ -33,8 +34,80 @@
 
   <title>DeepSeek 用量监控</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    首屏骨架：Flutter 引擎（main.dart.js 约 0.7MB gzip + canvaskit.wasm 约 1.9MB gzip）
+    下载并启动前，body 是纯白的，用户看到几秒白屏。这里放一个与 App 同色系的骨架，
+    引擎画出第一帧后由 main.dart 的回调移除。纯内联，不额外请求资源，不阻塞首屏。
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; background: #0B1020; }
+    #boot-skeleton {
+      position: fixed; inset: 0; z-index: 9998;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px;
+      background: radial-gradient(120% 80% at 50% 0%, #16213D 0%, #0B1020 62%);
+      color: #8FA3C8;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      transition: opacity .32s ease;
+    }
+    #boot-skeleton[data-done="1"] { opacity: 0; pointer-events: none; }
+    .bs-logo {
+      width: 54px; height: 54px; border-radius: 15px;
+      background: linear-gradient(140deg, #4EC2C6, #2E7BF6);
+      box-shadow: 0 8px 28px rgba(78, 194, 198, .28);
+      animation: bs-pulse 1.7s ease-in-out infinite;
+    }
+    .bs-title { font-size: 15px; letter-spacing: .06em; color: #C7D4EA; }
+    .bs-track {
+      width: 156px; height: 3px; border-radius: 2px;
+      background: rgba(143, 163, 200, .16); overflow: hidden;
+    }
+    .bs-bar {
+      width: 42%; height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, #4EC2C6, #2E7BF6);
+      animation: bs-slide 1.15s ease-in-out infinite;
+    }
+    .bs-hint { font-size: 12px; color: #5A6C8C; letter-spacing: .03em; }
+    @keyframes bs-pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(.93); opacity: .8; }
+    }
+    @keyframes bs-slide {
+      0% { transform: translateX(-115%); }
+      100% { transform: translateX(340%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bs-logo, .bs-bar { animation: none; }
+    }
+  </style>
 </head>
 <body>
+  <div id="boot-skeleton" role="status" aria-live="polite">
+    <div class="bs-logo"></div>
+    <div class="bs-title">DeepSeek 用量监控</div>
+    <div class="bs-track"><div class="bs-bar"></div></div>
+    <div class="bs-hint">正在加载界面…</div>
+  </div>
+
+  <script>
+    // 骨架移除：优先由 Flutter 第一帧触发；这里的定时器只是兜底，
+    // 万一引擎或网络彻底失败，30 秒后也不会让用户永远停在加载态。
+    (function () {
+      function dropSkeleton() {
+        var sk = document.getElementById('boot-skeleton');
+        if (!sk) return;
+        sk.setAttribute('data-done', '1');
+        setTimeout(function () {
+          if (sk.parentNode) sk.parentNode.removeChild(sk);
+        }, 380);
+      }
+      window.__dropBootSkeleton = dropSkeleton;
+      setTimeout(dropSkeleton, 30000);
+    })();
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

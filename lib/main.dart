@@ -4,6 +4,7 @@ import 'providers/auth_provider.dart';
 import 'providers/glass_provider.dart';
 import 'providers/usage_provider.dart';
 import 'screens/dashboard_screen.dart';
+import 'services/boot_skeleton.dart';
 import 'theme.dart';
 
 void main() {
@@ -11,6 +12,12 @@ void main() {
   // the first frame. Without this the very first run throws
   // "Binding has not yet been initialized." and the setting quietly never loads.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 首帧真正画出来之后再撤掉 web/index.html 里的骨架屏。
+  // 必须在 postFrameCallback 里做，而不是 runApp 一返回就摘 ——
+  // 否则用户会看到「骨架消失、界面还没上来」的中间空白。
+  WidgetsBinding.instance.addPostFrameCallback((_) => hideBootSkeleton());
+
   final glass = GlassProvider();
   glass.load();
   runApp(

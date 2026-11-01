@@ -270,7 +270,7 @@ class Mascot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget art = Image.asset(
-      head ? 'assets/mascot_head.png' : 'assets/mascot.png',
+      head ? 'assets/mascot_head.webp' : 'assets/mascot.webp',
       width: size,
       height: size,
       fit: BoxFit.contain,
