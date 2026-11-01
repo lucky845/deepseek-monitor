@@ -16,9 +16,10 @@
 #   ./tool/release_build.sh clean        # 清理 dist/ 和 build/
 #
 # 环境要求：
-#   - Flutter SDK 已加入 PATH（或设置 FLUTTER_ROOT）
+#   - Flutter SDK：优先用 FVM 锁定的版本（.fvmrc + `fvm install`，与 CI 一致）；
+#     未装 FVM 时退回 PATH 上的 flutter
 #   - iOS/macOS 构建需 Xcode 工具链
-#   - Android 构建需 Android SDK + JDK 17（JDK 21 + AGP 会踩 jlink 坑）
+#   - Android 构建需 Android SDK + JDK 17（brew install openjdk@17；JDK 21 + AGP 会踩 jlink 坑）
 #   - Linux/Windows 构建必须在对应主机上运行，无法交叉编译
 # =============================================================================
 set -euo pipefail
@@ -27,11 +28,57 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
-# 优先用环境变量 FLUTTER；其次从 PATH 找（brew 安装后全局可用）；
-# 兜底常见 Homebrew 前缀。不再依赖任何人的个人目录。
-FLUTTER="${FLUTTER:-$(command -v flutter 2>/dev/null || echo "$(brew --prefix 2>/dev/null)/bin/flutter")}"
-# JDK 17 用于绕过 JDK 21 + AGP JdkImageTransform/jlink 已知问题
-JDK17_HOME="${JDK17_HOME:-$HOME/.dsh/jdk/jdk-17.0.21+9/Contents/Home}"
+
+# --- Flutter 解析（优先级从高到低）---
+# 1. 环境变量 FLUTTER（显式指定，最高优先级）
+# 2. FVM 管理的项目锁版本 .fvm/flutter_sdk —— 版本由 .fvmrc 声明，与 CI 一致
+# 3. PATH 上的 flutter（brew 安装后全局可用）
+# 4. brew --prefix 兜底
+
+if [[ -z "${FLUTTER:-}" ]]; then
+  if [[ -x "$PROJECT_ROOT/.fvm/flutter_sdk/bin/flutter" ]]; then
+    FLUTTER="$PROJECT_ROOT/.fvm/flutter_sdk/bin/flutter"
+  elif command -v flutter >/dev/null 2>&1; then
+    FLUTTER="$(command -v flutter)"
+  elif brew --prefix >/dev/null 2>&1; then
+    FLUTTER="$(brew --prefix)/bin/flutter"
+  else
+    FLUTTER="flutter"
+  fi
+fi
+
+# --- JDK 17（Android 构建专用，绕过 JDK 21 + AGP JdkImageTransform/jlink 已知问题）---
+# 优先级：显式 JDK17_HOME > brew openjdk@17 > 系统 java_home 里的 17。
+
+# 注意：`/usr/libexec/java_home -v 17` 在只装了 JDK 21 的机器上会**回退返回 21**，
+# 所以拿到路径后必须核对其实际版本，否则等于没换、照样踩 jlink 坑。
+jdk_is_17() {
+  [[ -x "$1/bin/java" ]] || return 1
+  "$1/bin/java" -version 2>&1 | head -1 | grep -qE '"(1\.)?17\.'
+}
+
+detect_jdk17() {
+  if [[ -n "${JDK17_HOME:-}" ]]; then
+    printf '%s' "$JDK17_HOME"
+    return 0
+  fi
+  # brew openjdk@17（formula，keg-only；cask 版安装需要 sudo，不适合脚本）
+  local brew_jdk
+  brew_jdk="$(brew --prefix openjdk@17 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home"
+  if jdk_is_17 "$brew_jdk"; then
+    printf '%s' "$brew_jdk"
+    return 0
+  fi
+  # 系统 java_home 报告的 17（回退值可能是 21，故仍需核对版本）
+  local sys_jdk
+  sys_jdk="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
+  if [[ -n "$sys_jdk" ]] && jdk_is_17 "$sys_jdk"; then
+    printf '%s' "$sys_jdk"
+    return 0
+  fi
+  return 1
+}
+JDK17_HOME="$(detect_jdk17 || true)"
 
 # --- 颜色输出 ---
 RED='\033[0;31m'
@@ -70,6 +117,11 @@ build_android() {
   info "=== 打包 Android (APK, release) ==="
   cd "$PROJECT_ROOT"
   # JDK 21 + AGP 的 JdkImageTransform/jlink 已知问题：切换到 JDK 17 编译
+  if [[ -z "$JDK17_HOME" || ! -x "$JDK17_HOME/bin/java" ]]; then
+    error "未找到 JDK 17。请安装：brew install openjdk@17（或设置 JDK17_HOME 指向 JDK 17 根目录）"
+    return 1
+  fi
+  info "JDK 17: $JDK17_HOME"
   export JAVA_HOME="$JDK17_HOME"
   export PATH="$JAVA_HOME/bin:$PATH"
   if ! "$FLUTTER" build apk --release; then

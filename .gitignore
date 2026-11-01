@@ -33,5 +33,8 @@ linux/flutter/ephemeral/
 # 本机产物
 .DS_Store
 
+# FVM 管理的 Flutter SDK（版本由 .fvmrc 声明，SDK 本体不入库）
+.fvm/
+
 # 本地打包产物：tool/release_build.sh 输出到 dist/，往 GitHub Release 上传，不进仓库
 dist/
