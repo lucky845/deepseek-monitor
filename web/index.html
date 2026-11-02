@@ -95,6 +95,8 @@
     哪天 Flutter 升级改了这个 hash，这里就会 404 —— test/web_font_subset_test.dart 会拦住。
   -->
   <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.118.woff2" crossorigin>
+  <!-- 预取 CanvasKit，减少首屏等待 -->
+  <link rel="preload" as="fetch" href="canvaskit/canvaskit.wasm" crossorigin>
 </head>
 <body>
   <div id="boot-skeleton" role="status" aria-live="polite">
