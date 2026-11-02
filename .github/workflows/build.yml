@@ -40,12 +40,16 @@ jobs:
       # --no-web-resources-cdn 是这里最重要的一条：不关掉它，Flutter 会去
       #   www.gstatic.com 拉 6.4MB 的 canvaskit.wasm，国内网络不可达，
       #   浏览器卡到超时 -> 长时间白屏。关掉后从本站 canvaskit/ 目录取。
-      # --web-renderer=canvaskit 显式固定渲染器，避免 auto 在不同浏览器间行为漂移。
+      # --dart-define=PLATFORM_API_BASE 指向 Cloudflare Worker 反代
+      #   （monitor.lucky845.top/platform-api/* -> platform.deepseek.com）。
+      #   平台接口不回 CORS 头，浏览器直连必被拦；没有这行，网页端平台令牌
+      #   那一路就是死的。反代部署与权限见 docs/web-and-proxy.md。
       - run: >-
           flutter build web --release
           --pwa-strategy=none
           --base-href /
           --no-web-resources-cdn
+          --dart-define=PLATFORM_API_BASE=https://monitor.lucky845.top/platform-api
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:
