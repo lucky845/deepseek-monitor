@@ -133,6 +133,33 @@
     })();
   </script>
 
-  <script src="flutter_bootstrap.js" async></script>
+  <!--
+    这里不能直接 <script src="flutter_bootstrap.js" async>，先注销残留 Service Worker 再注入。
+
+    Flutter 3.47 起 service worker 被废弃：flutter_bootstrap.js 写死 serviceWorkerVersion: null，
+    flutter_service_worker.js 是 0 字节（--pwa-strategy=none）。但早期部署在用户浏览器里注册的
+    旧 SW（?v=<旧hash>）不会自己消失。bootstrap 的 loadServiceWorker 见到旧 registration 就
+    update() 出一个新 SW——0 字节脚本没有 skipWaiting，永远停在 waiting，
+    _waitForServiceWorkerActivation 只能等到 4000ms 超时，之后才 Injecting <script>。
+    于是 main.dart.js 晚发 4 秒，network 中段整段空窗（开屏动画转的就是这 4 秒）。
+    先 unregister 再注入 bootstrap：loader 走 getRegistration() 为空的快路径，不注册不等待。
+  -->
+  <script>
+    (function () {
+      function injectBootstrap() {
+        var s = document.createElement('script');
+        s.src = 'flutter_bootstrap.js';
+        s.async = true;
+        document.body.appendChild(s);
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).then(injectBootstrap, injectBootstrap);
+      } else {
+        injectBootstrap();
+      }
+    })();
+  </script>
 </body>
 </html>
