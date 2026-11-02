@@ -46,7 +46,6 @@ jobs:
           --pwa-strategy=none
           --base-href /
           --no-web-resources-cdn
-          --web-renderer=canvaskit
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:
