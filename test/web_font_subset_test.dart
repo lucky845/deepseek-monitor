@@ -141,6 +141,30 @@ Uint8List readFont(Directory root, String key, Map<String, String> info) {
   return file.readAsBytesSync();
 }
 
+/// The v37 woff2 slices Flutter 3.45+ fetches one at a time.
+///
+/// Three APIs handle woff2 here: the browser and the script (via fontTools) do
+/// the Brotli decompression; this test does not — it only needs to know they
+/// exist and are recorded, plus each slice's declared byte count.
+List<File> shippedSlices(Directory root, Map<String, String> info) {
+  final dir = info['slices.dir'];
+  if (dir == null) {
+    throw StateError('SUBSET_INFO.txt must name the v37 slice directory; '
+        'run tool/subset_web_fonts.py --refresh-slices');
+  }
+  final slices = Directory('${root.path}/$dir')
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.woff2'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+  if (slices.isEmpty) {
+    throw StateError('$dir is empty; Flutter 3.45+ would fall back to '
+        'fonts.gstatic.com for every Chinese glyph');
+  }
+  return slices;
+}
+
 void main() {
   final root = projectRoot();
   final info = subsetInfo(root);
@@ -211,10 +235,15 @@ void main() {
               'the page once it lands');
       final href =
           RegExp(r'href="([^"]+)"').firstMatch(hint!.group(0)!)!.group(1)!;
-      expect('web/$href', info['noto.dst'],
-          reason: 'the hint preloads $href but the build ships '
-              '${info['noto.dst']} — the hashed filename changed, so the hint '
-              'now 404s. Point web/index.html at the shipped font');
+      final slicesDir = info['slices.dir'];
+      expect(slicesDir, isNotNull,
+          reason: 'SUBSET_INFO.txt must name the v37 slice directory');
+      expect(
+        href.startsWith(slicesDir!.replaceFirst('web/', '')),
+        isTrue,
+        reason: 'the hint preloads $href but should point into '
+            '${slicesDir.replaceFirst('web/', '')} for Flutter 3.45+ slices',
+      );
       expect(File('${root.path}/web/$href').existsSync(), isTrue,
           reason: 'web/$href is what every visitor preloads');
     });
