@@ -85,11 +85,16 @@
 
   <!--
     提前预取中文兜底字体。引擎是画到「缺字形」的字符才去下载它的，而那时首帧早过了，
-    下完还得重排一次（4G 下多花 ~390ms）。这里让它跟 canvaskit.wasm 并行取回，只有 94KB。
+    下完还得重排一次（4G 下多花几百毫秒）。
+
+    Flutter 3.45+ 起引擎改用 v37 分片（按字符切、按需取）。32 片里这一片覆盖了
+    lib/ 中 118/413 个汉字（28.6%，按字符数排第一），27.5KB，作为首帧快路径预取；
+    其余分片由引擎在真正用到时按需加载，避免把 217KB 全量推给只看看首页的用户。
+
     文件名里的 hash 由引擎在构建时写死，子集只能原地替换内容（见 docs/web-and-proxy.md）；
     哪天 Flutter 升级改了这个 hash，这里就会 404 —— test/web_font_subset_test.dart 会拦住。
   -->
-  <link rel="preload" as="fetch" href="fonts/notosanssc/v36/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYxNbPzS5HE.ttf" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.118.woff2" crossorigin>
 </head>
 <body>
   <div id="boot-skeleton" role="status" aria-live="polite">
