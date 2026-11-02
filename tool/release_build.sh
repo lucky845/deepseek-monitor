@@ -31,9 +31,27 @@ DIST_DIR="$PROJECT_ROOT/dist"
 
 # --- Flutter 解析（优先级从高到低）---
 # 1. 环境变量 FLUTTER（显式指定，最高优先级）
-# 2. FVM 管理的项目锁版本 .fvm/flutter_sdk —— 版本由 .fvmrc 声明，与 CI 一致
-# 3. PATH 上的 flutter（brew 安装后全局可用）
-# 4. brew --prefix 兜底
+# 2. .fvmrc 声明的 FVM 版本（与 CI 同源，保证本地/CI 同一 Flutter 版本）
+# 3. FVM 管理的项目软链 .fvm/flutter_sdk
+# 4. PATH 上的 flutter（brew 安装后全局可用）
+# 5. brew --prefix 兜底
+
+if [[ -z "${FLUTTER:-}" ]]; then
+  # 解析 .fvmrc 里的 "flutter": "x.y.z"
+  fvm_ver="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PROJECT_ROOT/.fvmrc" 2>/dev/null | head -1)"
+  if [[ -n "$fvm_ver" ]]; then
+    # fvm 版本仓库两处都探（新旧 fvm 默认路径不同）
+    for d in "$HOME/fvm/versions/$fvm_ver" "$HOME/.fvm/versions/$fvm_ver"; do
+      if [[ -x "$d/bin/flutter" ]]; then
+        FLUTTER="$d/bin/flutter"
+        break
+      fi
+    done
+    if [[ -z "${FLUTTER:-}" ]]; then
+      warn ".fvmrc 要求 Flutter $fvm_ver，但本机未安装（fvm install $fvm_ver），回退 .fvm/flutter_sdk"
+    fi
+  fi
+fi
 
 if [[ -z "${FLUTTER:-}" ]]; then
   if [[ -x "$PROJECT_ROOT/.fvm/flutter_sdk/bin/flutter" ]]; then
@@ -99,6 +117,50 @@ check_flutter() {
   info "Flutter: $($FLUTTER --version 2>/dev/null | head -1)"
 }
 
+# --- 依赖自愈：有则跳过，无则 brew 安装（幂等） ---
+ensure_cocoapods() {
+  if command -v pod >/dev/null 2>&1; then
+    return 0
+  fi
+  warn "CocoaPods 未安装，执行 brew install cocoapods ..."
+  if ! command -v brew >/dev/null 2>&1; then
+    error "brew 不可用，无法自动安装 CocoaPods。请先安装 Homebrew: https://brew.sh"
+    return 1
+  fi
+  if ! brew install cocoapods; then
+    error "CocoaPods 安装失败。可手动重试：brew install cocoapods"
+    return 1
+  fi
+  info "CocoaPods 已安装: $(pod --version 2>/dev/null)"
+}
+
+ensure_xcode() {
+  if command -v xcodebuild >/dev/null 2>&1; then
+    return 0
+  fi
+  error "Xcode 未安装（iOS/macOS 构建必需）。请从 App Store 安装 Xcode 后执行 xcode-select --install"
+  return 1
+}
+
+# Flutter 3.47+ 硬性要求 Gradle >= 8.14，低于则构建直接失败。
+# 幂等自愈：存在即核对版本，过低自动改 gradle-wrapper.properties（无需重新下载 wrapper jar）。
+ensure_gradle_wrapper() {
+  local props="$PROJECT_ROOT/android/gradle/wrapper/gradle-wrapper.properties"
+  [[ -f "$props" ]] || return 0
+  local min_ver="8.14" cur
+  cur="$(sed -n 's/^distributionUrl=.*gradle-\([0-9][0-9.]*\)-all\.zip.*/\1/p' "$props")"
+  [[ -n "$cur" ]] || return 0
+  # sort -V 求最小：最小是 cur 且 cur != min_ver  => cur 低于 min_ver
+  if [[ "$(printf '%s\n%s\n' "$cur" "$min_ver" | sort -V | head -1)" == "$cur" && "$cur" != "$min_ver" ]]; then
+    warn "Gradle wrapper $cur 低于 Flutter 最低要求 $min_ver，自动升级"
+    local tmp
+    tmp="$(mktemp)"
+    sed "s|^\(distributionUrl=.*gradle-\)[0-9][0-9.]*\(-all\.zip.*\)|\1${min_ver}\2|" "$props" > "$tmp"
+    mv "$tmp" "$props"
+    info "gradle-wrapper.properties -> gradle-$min_ver"
+  fi
+}
+
 # --- 清理 ---
 do_clean() {
   info "清理 dist/ 和 build/ ..."
@@ -118,12 +180,23 @@ build_android() {
   cd "$PROJECT_ROOT"
   # JDK 21 + AGP 的 JdkImageTransform/jlink 已知问题：切换到 JDK 17 编译
   if [[ -z "$JDK17_HOME" || ! -x "$JDK17_HOME/bin/java" ]]; then
-    error "未找到 JDK 17。请安装：brew install openjdk@17（或设置 JDK17_HOME 指向 JDK 17 根目录）"
-    return 1
+    warn "未找到 JDK 17，执行 brew install openjdk@17 ..."
+    if ! command -v brew >/dev/null 2>&1; then
+      error "brew 不可用，无法自动安装 JDK 17。请先安装 Homebrew 或设置 JDK17_HOME"
+      return 1
+    fi
+    brew install openjdk@17 || true
+    JDK17_HOME="$(detect_jdk17 || true)"
+    if [[ -z "$JDK17_HOME" || ! -x "$JDK17_HOME/bin/java" ]]; then
+      error "JDK 17 安装后仍未找到。可手动重试：brew install openjdk@17（或设置 JDK17_HOME）"
+      return 1
+    fi
+    info "JDK 17 已安装: $JDK17_HOME"
   fi
   info "JDK 17: $JDK17_HOME"
   export JAVA_HOME="$JDK17_HOME"
   export PATH="$JAVA_HOME/bin:$PATH"
+  ensure_gradle_wrapper
   if ! "$FLUTTER" build apk --release; then
     warn "Android Gradle 构建失败"
     return 1
@@ -142,6 +215,8 @@ build_android() {
 build_ios() {
   info "=== 打包 iOS (release, --no-codesign) ==="
   cd "$PROJECT_ROOT"
+  ensure_xcode || return 1
+  ensure_cocoapods || return 1
   if ! "$FLUTTER" build ios --release --no-codesign; then
     warn "iOS 构建失败"
     return 1
@@ -172,6 +247,8 @@ build_ios() {
 build_macos() {
   info "=== 打包 macOS (release) ==="
   cd "$PROJECT_ROOT"
+  ensure_xcode || return 1
+  ensure_cocoapods || return 1
 
   # macOS entitlements 含 app-sandbox / application-groups，需要代码签名证书。
   # 构建时临时替换为简化版（不含需签名的 key），构建完成后恢复原文件，
