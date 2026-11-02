@@ -82,6 +82,14 @@
       .bs-logo, .bs-bar { animation: none; }
     }
   </style>
+
+  <!--
+    提前预取中文兜底字体。引擎是画到「缺字形」的字符才去下载它的，而那时首帧早过了，
+    下完还得重排一次（4G 下多花 ~390ms）。这里让它跟 canvaskit.wasm 并行取回，只有 94KB。
+    文件名里的 hash 由引擎在构建时写死，子集只能原地替换内容（见 docs/web-and-proxy.md）；
+    哪天 Flutter 升级改了这个 hash，这里就会 404 —— test/web_font_subset_test.dart 会拦住。
+  -->
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v36/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYxNbPzS5HE.ttf" crossorigin>
 </head>
 <body>
   <div id="boot-skeleton" role="status" aria-live="polite">

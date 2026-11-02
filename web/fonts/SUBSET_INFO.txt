@@ -1,0 +1,15 @@
+# 由 tool/subset_web_fonts.py 生成，请勿手工编辑。
+# 校验：uv run --no-project --with fonttools python tool/subset_web_fonts.py --check
+#       flutter test test/web_font_subset_test.dart
+charset.chars=626
+charset.sha256=9fd3aa7e79a7fa4e79b7c1594bf6ea798057655e4d9be054d12f3ad538bb5a72
+noto.src=tool/font_src/NotoSansSC-Regular.ttf
+noto.src.sha256=17f2e83eba9a3739c15d23b1516cec510ba0e1346b1dde40d787cdd5e5899479
+noto.dst=web/fonts/notosanssc/v36/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYxNbPzS5HE.ttf
+noto.dst.sha256=f8c357a425eacb86f632a6be869677267af1d466f861653d94c06cc0000b3684
+noto.bytes=152384
+roboto.src=tool/font_src/Roboto-Regular.ttf
+roboto.src.sha256=017c0be9aaa6d0359737e1fa762ad304c0e0107927faff5a6c1f415c7f5244ed
+roboto.dst=web/fonts/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf
+roboto.dst.sha256=188069fa513eb23429e9170c3e602144bb82b4b976811682d143fa02a5a9467e
+roboto.bytes=55588
