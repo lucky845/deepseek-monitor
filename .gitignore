@@ -44,3 +44,5 @@ dist/
 tool/font_src/*.ttf
 tool/font_src/*.otf
 tool/font_src/*.woff2
+# --refresh-slices 从 fonts.gstatic.com 下载的分片缓存（可随时重下，不入库）
+tool/font_src/_slices/
