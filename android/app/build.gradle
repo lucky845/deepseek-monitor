@@ -30,6 +30,14 @@ android {
         versionName = flutter.versionName
     }
 
+    packaging {
+        jniLibs {
+            // minSdk 24 时 AGP 默认把 .so 未压缩塞进 APK（52M）。改回压缩存储：
+            // APK 瘦身到 ~23M，安装时由 PackageManager 解压（Android 6+ 均支持）。
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
