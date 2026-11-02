@@ -36,6 +36,8 @@ python3 tool/dev_proxy.py --port 8788 --host 0.0.0.0 --root build/web
 flutter build web --release --dart-define=PLATFORM_API_BASE=https://你的反代域名/platform-api
 ```
 
+**线上（monitor.lucky845.top）已经这么配了**：CI 构建带 `--dart-define=PLATFORM_API_BASE=https://monitor.lucky845.top/platform-api`，反代是一个 Cloudflare Worker（`platform-api-proxy`），zone `lucky845.top` 上的 route `monitor.lucky845.top/platform-api/*` 把请求转发到 `platform.deepseek.com`，并补上 `Access-Control-Allow-Origin`。Worker 源码在 [tool/cloudflare_worker/platform-api-proxy.js](../tool/cloudflare_worker/platform-api-proxy.js)；改动用 API Token 调 `PUT /accounts/{id}/workers/scripts/platform-api-proxy`（multipart，注意 `Content-Disposition` 必须带 `form-data;` 前缀）+ `POST /zones/{id}/workers/routes`。平台对无 User-Agent 的请求回 429，所以反代必须透传浏览器 UA。
+
 `?api_base=` 只认本机回环（`127.0.0.1` / `localhost` / `::1`）和私有网段（`10.x`、`172.16–31.x`、`192.168.x`，含模拟器的 `10.0.2.2`）：这个值来自 URL，随便谁都能构造一个链接，若允许任意公网主机，就等于允许别人把你的令牌发到自己的服务器。要换公网域名请用 `--dart-define`（构建者自己决定）或部署自己的反代。逻辑在 `lib/services/api_base.dart`，有单测覆盖（回环放行、私有网段放行、公网与伪装域名拒绝、非 http 拒绝、尾斜杠归一、优先级顺序）。
 
 ## 中文字体是自托管的子集
