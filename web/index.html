@@ -95,6 +95,18 @@
     哪天 Flutter 升级改了这个 hash，这里就会 404 —— test/web_font_subset_test.dart 会拦住。
   -->
   <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.118.woff2" crossorigin>
+  <!--
+    这里**故意不预取** canvaskit.wasm，别再把它加回来。
+
+    引擎不会加载 canvaskit/canvaskit.wasm，而是按浏览器能力挑变体：
+    Chromium 走 canvaskit/chromium/canvaskit.wasm（5.4MB / gzip 2.1MB），
+    支持 TextCluster 的走 canvaskit/webparagraph/（3.7MB）。
+    在 index.html 里 preload 根目录那份，等于让浏览器白下 7.3MB（gzip 2.9MB、
+    实测 1.28s），随后引擎再下它真正要的那份 —— 首屏凭空多背一次完整下载。
+
+    实测（Chrome，本地）：去掉这行后 canvaskit 只剩 1 个请求。
+    test/web_boot_assets_test.dart 会拦住重新加回来。
+  -->
 </head>
 <body>
   <div id="boot-skeleton" role="status" aria-live="polite">
