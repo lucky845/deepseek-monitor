@@ -176,6 +176,34 @@ modulepreload 走的是模块图，不会像 preload as=script 那样多下一�
     modulepreload 才会进模块图（用 preload as=script 会拿到一份不进模块
     缓存的副本，等于下两遍）；两个 .wasm 用 preload as=fetch + crossorigin。
     test/web_boot_assets_test.dart 会校验这里列的每一项。
+
+    ---- 后半段：字体与清单资源 ----
+
+    wasm 到齐只是「引擎能启动了」，接下来还有一截纯串行的小请求，
+    每一步都在等上一步的回包，而每个包 gzip 后只有几百字节到 37KB：
+
+      FontManifest.json (298B) → MaterialIcons / Roboto / CupertinoIcons
+                               → AssetManifest.bin.json → 业务资源
+
+    这条链最早只能在主线程跑起来之后才发起：读 index.html 时还不知道要下
+    哪几份字体。实测（生产页面，wasm 全部到齐之后）FontManifest.json
+    直到 1542→1781ms 才完成，MaterialIcons 1786→2005ms（下面带 B 的都是 transferSize），
+    AssetManifest.bin.json 2284→2501ms，首帧被吊在后面。
+
+    把五项一起预取后（本地 HTTP/2 + CDP 节流，两臂同一份 build/web，
+    配对同轮相减）：
+      Fast 4G (9Mbps/40ms)     2612 → 2523ms    -86ms   6/6
+      宽带   (40Mbps/20ms)      748 →  701ms    -45ms   5/6
+      Slow 3G(1.6Mbps/100ms)  13354 → 13157ms  -193ms   4/4
+    资源数与 transferSize 两臂完全一致（23 条 / 2,739,484B），没有重复下载。
+
+    为什么必须门控：这五项是 wasm 构建的产物。js 回退分支（不支持 WasmGC
+    的浏览器）根本不读它们，所以和上面五个一样放在同一个探针后面。
+    负向实测：把探针拦成 false 后，两臂资源数都是 20、transferSize 都是
+    3,145,255B，一字不差。
+
+    Roboto 那份 36,950B 是子集（见 tool/subset_web_fonts.py），不是全量
+    167.7KB —— 预取它不会把首屏流量放大。
   -->
   <script>
     (function () {
@@ -191,7 +219,12 @@ modulepreload 走的是模块图，不会像 preload as=script 那样多下一�
         ['modulepreload', null, 'main.dart.mjs', true],
         ['modulepreload', null, 'canvaskit/skwasm.js', true],
         ['preload', 'fetch', 'canvaskit/skwasm.wasm', true],
-        ['preload', 'fetch', 'main.dart.wasm', true]
+        ['preload', 'fetch', 'main.dart.wasm', true],
+        ['preload', 'fetch', 'assets/FontManifest.json', true],
+        ['preload', 'fetch', 'assets/AssetManifest.bin.json', true],
+        ['preload', 'fetch', 'assets/fonts/MaterialIcons-Regular.otf', true],
+        ['preload', 'fetch', 'assets/fonts/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf', true],
+        ['preload', 'fetch', 'assets/packages/cupertino_icons/assets/CupertinoIcons.ttf', true]
       ];
       for (var i = 0; i < links.length; i++) {
         var link = document.createElement('link');
