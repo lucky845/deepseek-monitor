@@ -140,6 +140,69 @@
     实测（Chrome，本地）：去掉这行后 canvaskit 只剩 1 个请求。
     test/web_boot_assets_test.dart 会拦住重新加回来。
   -->
+
+  <!--
+    把整条 wasm 启动链在解析 HTML 时就全部发出去，而不是等 bootstrap 一档档发现。
+
+    引擎的加载是一条串行链：flutter_bootstrap.js → 解析出 main.dart.mjs →
+    才请求 skwasm.js / skwasm.wasm / main.dart.wasm。每一跳都要等前一个下载
+    完才能发，HTTP/2 上每跳约 1 个 RTT。这四个文件加起来 2.5MB，链路却要
+    4 跳才铺满带宽，大部分时间里连接是闲的。
+
+    实测（本地 HTTP/2 + CDP 节流，两臂同一份 build/web，配对同轮相减）：
+      Fast 4G (9Mbps/40ms)    2980 → 2602ms   -376ms   6/6
+      宽带   (40Mbps/20ms)    1331 →  935ms   -332ms   5/6
+      Slow 3G(1.6Mbps/100ms) 13385 → 13376ms    +2ms   2/4（持平）
+
+    体积零代价：两臂 transferSize 合计都是 2,744,836B、资源数都是 23 ——
+modulepreload 走的是模块图，不会像 preload as=script 那样多下一份副本。
+
+    为什么 Slow 3G 不赚：那时瓶颈是 1.5MB 的 skwasm.wasm 本身要下 12 秒，
+    提前 600ms 发起也改变不了它什么时候下完，反而挤占了 main.dart.mjs 的连接。
+    收益 ≈ min(省下的发现延迟, 带宽排队时间)，带宽足够时才为正。
+
+    为什么必须门控 WasmGC：
+      index.html 是 js / wasm 两套构建共用的。浏览器不支持 WasmGC 时
+      flutter_bootstrap.js 会回退去下 main.dart.js + canvaskit.wasm（3.2MB），
+      不会碰这里预取的任何一个文件 —— 白下 2.5MB，等于把首屏拖慢一倍。
+      所以先用和引擎完全相同的探针（flutter_js/flutter.js 里的 B()）判一次，
+      支持才注入。探针字节必须与引擎一致，否则会出现「页面预取了 wasm 构建、
+      引擎却走 js 回退」，两边都在下用户永远用不到的东西。
+      负向实测：把该探针拦成 false 后，页面一条 link 都不注入，请求列表与改动前
+      完全一致（只有 main.dart.js + canvaskit/chromium/canvaskit.wasm，
+      transferSize 3,150,607B），零浪费。
+
+    注意 rel 不能写混：main.dart.mjs 与 skwasm.js 是 ES module，用
+    modulepreload 才会进模块图（用 preload as=script 会拿到一份不进模块
+    缓存的副本，等于下两遍）；两个 .wasm 用 preload as=fetch + crossorigin。
+    test/web_boot_assets_test.dart 会校验这里列的每一项。
+  -->
+  <script>
+    (function () {
+      // 与 flutter_bootstrap.js 里 B() 的探针字节保持一致。
+      var probe = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0];
+      try {
+        if (!WebAssembly.validate(new Uint8Array(probe))) return;
+      } catch (e) {
+        return;
+      }
+      var links = [
+        ['preload', 'script', 'flutter_bootstrap.js', false],
+        ['modulepreload', null, 'main.dart.mjs', true],
+        ['modulepreload', null, 'canvaskit/skwasm.js', true],
+        ['preload', 'fetch', 'canvaskit/skwasm.wasm', true],
+        ['preload', 'fetch', 'main.dart.wasm', true]
+      ];
+      for (var i = 0; i < links.length; i++) {
+        var link = document.createElement('link');
+        link.rel = links[i][0];
+        if (links[i][1]) link.as = links[i][1];
+        link.href = links[i][2];
+        if (links[i][3]) link.crossOrigin = '';
+        document.head.appendChild(link);
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="boot-skeleton" role="status" aria-live="polite">
