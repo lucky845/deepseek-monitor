@@ -9,6 +9,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+/// Where the engine's own runtime assets are served from when the app opts
+/// back into the CDN. See the comment in `web/flutter_bootstrap.js`.
+const String engineCdnPrefix =
+    'https://www.gstatic.com/flutter-canvaskit/';
+
 Directory projectRoot() {
   var dir = Directory.current;
   while (!File('${dir.path}/pubspec.yaml').existsSync()) {
@@ -76,19 +81,26 @@ List<int> wasmGcProbe(String source) {
   return body.split(',').map((s) => int.parse(s.trim())).toList();
 }
 
-/// `flutter_js/flutter.js` inside the Flutter SDK running this test. The
-/// source-tree `web/flutter_bootstrap.js` only carries a `{{flutter_js}}`
-/// placeholder, so the probe bytes live here, in the SDK.
-File? engineFlutterJs() {
+/// Root of the Flutter SDK that owns the runner executing this test.
+Directory? engineSdkRoot() {
   var dir = Directory(Platform.resolvedExecutable).parent;
-  for (var i = 0; i < 6; i++) {
-    final candidate = File('${dir.path}/flutter_web_sdk/flutter_js/flutter.js');
-    if (candidate.existsSync()) return candidate;
+  for (var i = 0; i < 8; i++) {
+    if (File('${dir.path}/bin/internal/engine.version').existsSync()) return dir;
     final parent = dir.parent;
     if (parent.path == dir.path) break;
     dir = parent;
   }
   return null;
+}
+
+/// `flutter_js/flutter.js` inside the Flutter SDK running this test. The
+/// source-tree `web/flutter_bootstrap.js` only carries a `{{flutter_js}}`
+/// placeholder, so the probe bytes live here, in the SDK.
+File? engineFlutterJs() {
+  final sdk = engineSdkRoot();
+  if (sdk == null) return null;
+  final candidate = File('${sdk.path}/bin/cache/flutter_web_sdk/flutter_js/flutter.js');
+  return candidate.existsSync() ? candidate : null;
 }
 
 void main() {
@@ -144,26 +156,75 @@ void main() {
     expect(links, hasLength(10), reason: '预取清单被改动，请同步更新注释与实测数据');
 
     final byHref = {for (final l in links) l[2]!: l};
-    expect(byHref.keys, containsAll(<String>[
+    // The two engine files carry an absolute gstatic URL, so look them up by
+    // suffix; the rest are same-origin literals.
+    List<String?>? find(String suffix) {
+      for (final e in byHref.entries) {
+        if (e.key == suffix || e.key.endsWith('/$suffix')) return e.value;
+      }
+      return null;
+    }
+
+    for (final href in <String>[
       'flutter_bootstrap.js',
       'main.dart.mjs',
-      'canvaskit/skwasm.js',
-      'canvaskit/skwasm.wasm',
       'main.dart.wasm',
-    ]));
+    ]) {
+      expect(byHref.containsKey(href), isTrue, reason: '$href 掉出了预取清单');
+    }
+    for (final suffix in <String>['skwasm.js', 'skwasm.wasm']) {
+      expect(find(suffix), isNotNull, reason: '$suffix 掉出了预取清单');
+    }
 
     // ES modules must use modulepreload; preload as=script leaves a second,
     // uncached copy behind — measured as +17,354 bytes and a slower first frame.
     expect(byHref['main.dart.mjs']![0], 'modulepreload');
-    expect(byHref['canvaskit/skwasm.js']![0], 'modulepreload');
-    for (final wasm in ['canvaskit/skwasm.wasm', 'main.dart.wasm']) {
-      expect(byHref[wasm]![0], 'preload');
-      expect(byHref[wasm]![1], 'fetch');
+    expect(find('skwasm.js')![0], 'modulepreload');
+    for (final suffix in <String>['skwasm.wasm', 'main.dart.wasm']) {
+      final l = byHref[suffix] ?? find(suffix)!;
+      expect(l[0], 'preload');
+      expect(l[1], 'fetch');
+      // crossOrigin is mandatory for a fetch preload, cross-origin or not:
+      // the engine fetches wasm in CORS mode, and a no-cors preload is a
+      // different cache entry — it would download twice.
+      expect(l[3], 'true', reason: '$suffix 的预取必须带 crossorigin');
     }
 
-    // Same-origin only, or the preload burns a connection to another host.
+    // Everything except the two engine files must stay same-origin: a third
+    // party preload costs an extra connection setup on the critical path.
     for (final href in byHref.keys) {
+      if (href.startsWith(engineCdnPrefix)) continue;
       expect(href.startsWith('http'), isFalse, reason: '$href 必须是同源路径');
+    }
+
+    // The two engine files come from gstatic because Cloudflare cannot serve
+    // brotli of the original stream: on this domain skwasm.wasm is gzip
+    // 1,551,371B (CF re-compresses the origin's gzip at ~q4), while gstatic
+    // serves br q11 1,225,993B — the same bytes, 21% smaller. Measured end to
+    // end: -261ms on Fast 4G, -1482ms on Slow 3G, +77ms on broadband.
+    //
+    // The URL embeds the engine revision, so it must be the revision the SDK
+    // running this test would build against; a stale hash is a 404 sitting on
+    // the critical path (the page would still render, from a much slower path).
+    for (final name in <String>['skwasm.js', 'skwasm.wasm']) {
+      final href = byHref.keys.firstWhere((h) => h.startsWith(engineCdnPrefix) && h.endsWith('/$name'),
+          orElse: () => '');
+      expect(href, isNotEmpty, reason: '$name 没有指向 gstatic，会退回 gzip 那份（多 325KB）');
+    }
+
+    final engineRev = File(
+            '${engineSdkRoot()?.path}/bin/internal/engine.version')
+        .existsSync()
+        ? File('${engineSdkRoot()!.path}/bin/internal/engine.version')
+            .readAsStringSync()
+            .trim()
+        : null;
+    if (engineRev != null && engineRev.isNotEmpty) {
+      for (final href in byHref.keys.where((h) => h.startsWith(engineCdnPrefix))) {
+        expect(href, contains('/$engineRev/'),
+            reason: 'gstatic 地址里的引擎版本与 SDK 的 engine.version 不一致，'
+                'Flutter 升级后会 404');
+      }
     }
   });
 
@@ -199,6 +260,25 @@ void main() {
       expect(byHref[href]![3], 'true',
           reason: '$href 必须带 crossorigin，否则与引擎的 CORS 抓取不是同一条缓存项');
     }
+  });
+
+  test('the loader config sends the engine wasm to gstatic, by engineRevision', () {
+    // Hard-coding the revision in the loader config would 404 on the next
+    // Flutter upgrade, so it is derived from buildConfig.engineRevision at
+    // runtime — and when that is missing the config must fall back to the
+    // same-origin copy rather than point at a half-built URL.
+    final boot = File('${projectRoot().path}/web/flutter_bootstrap.js')
+        .readAsStringSync();
+    expect(boot, contains('canvasKitBaseUrl'),
+        reason: 'canvasKitBaseUrl 丢了，引擎 wasm 会退回本站的 gzip 那份（多 325KB）');
+    expect(boot, contains('engineRevision'),
+        reason: 'canvasKitBaseUrl 必须由 buildConfig.engineRevision 现算，不能写死版本号');
+    expect(boot, contains('https://www.gstatic.com/flutter-canvaskit/'),
+        reason: 'canvasKitBaseUrl 必须指向 gstatic 的 frankenstein 目录');
+    // The fallback is the absence of the key, not a broken URL: if the
+    // revision is unknown the loader keeps using canvaskit/ next to the app.
+    expect(boot, isNot(contains("canvasKitBaseUrl = 'canvaskit")),
+        reason: '缺副本时的兜底应当靠「不设这个 key」，而不是写一个本地绝对路径');
   });
 
   test('the page gates the wasm preloads on the same WasmGC probe as the engine',

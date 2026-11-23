@@ -177,6 +177,25 @@ modulepreload 走的是模块图，不会像 preload as=script 那样多下一�
     缓存的副本，等于下两遍）；两个 .wasm 用 preload as=fetch + crossorigin。
     test/web_boot_assets_test.dart 会校验这里列的每一项。
 
+    ---- 那两个引擎文件为什么是 gstatic 的绝对地址 ----
+
+    skwasm.js / skwasm.wasm 不再从本站取：本站（Cloudflare 免费版）给的是
+    gzip 1,551,371B，而 gstatic 同一份产物给 br q11 1,225,993B —— 差 325KB / −21%。
+    根因是 CF 对源站已经 gzip 过的流再压一遍（本地 zlib 复现 br11(gzip9)
+    = 1,535,137B，与生产实测 1,540,088B 只差 0.3%），只有拿到原始流才可能有
+    21% 这个量级（raw→br：q4 −0.7%、q5 −7.6%、q9 −10.4%、q11 −21.3%）。
+    详见 flutter_bootstrap.js 顶部注释里的完整实测。
+
+    preconnect 提前把 TLS 握掉（国内直连 gstatic 实测 TCP 26–46ms、
+    TLS 95–117ms、TTFB 161–188ms），否则这段建连会压在那 1.2MB 前面。
+
+    实测（本地 HTTP/2，两臂同一份 build/web，同轮配对相减）：
+      Fast 4G (9Mbps/40ms)    2517 → 2254ms   -266ms   5/5
+      宽带    (40Mbps/20ms)    702 →  695ms     -4ms   4/6（噪声）
+      Slow 3G (1.6Mbps/100ms) 13162 → 11679ms -1481ms  4/4
+    transferSize 合计 2,739,484 → 1,186,561B，资源数都是 23，无重复下载。
+    宽带这一档从上一轮的 +77ms 回退变成持平，靠的就是这条 preconnect。
+
     ---- 后半段：字体与清单资源 ----
 
     wasm 到齐只是「引擎能启动了」，接下来还有一截纯串行的小请求，
@@ -214,11 +233,19 @@ modulepreload 走的是模块图，不会像 preload as=script 那样多下一�
       } catch (e) {
         return;
       }
+      // 引擎 wasm 从 gstatic 取（理由见 flutter_bootstrap.js 顶部注释）。
+      // 跨源建连 TLS 约 95–117ms，提前在解析 HTML 阶段握掉，别让它压在
+      // 1.2MB 的 skwasm.wasm 前面。
+      var pre = document.createElement('link');
+      pre.rel = 'preconnect';
+      pre.href = 'https://www.gstatic.com';
+      pre.crossOrigin = '';
+      document.head.appendChild(pre);
       var links = [
         ['preload', 'script', 'flutter_bootstrap.js', false],
         ['modulepreload', null, 'main.dart.mjs', true],
-        ['modulepreload', null, 'canvaskit/skwasm.js', true],
-        ['preload', 'fetch', 'canvaskit/skwasm.wasm', true],
+        ['modulepreload', null, 'https://www.gstatic.com/flutter-canvaskit/89c39edfdfae2949f6806e4a315c0c08522238b7/skwasm.js', true],
+        ['preload', 'fetch', 'https://www.gstatic.com/flutter-canvaskit/89c39edfdfae2949f6806e4a315c0c08522238b7/skwasm.wasm', true],
         ['preload', 'fetch', 'main.dart.wasm', true],
         ['preload', 'fetch', 'assets/FontManifest.json', true],
         ['preload', 'fetch', 'assets/AssetManifest.bin.json', true],
