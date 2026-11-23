@@ -49,8 +49,11 @@ Future<void> main(List<String> args) async {
     stdout.writeln('  model ${m.model} tokens=${m.totalTokens} '
         'cost=${m.cost.toStringAsFixed(4)}');
   }
+  // todayCost/monthlyCost are null on the partial payload the dashboard paints
+  // before the KPI extras land; print the dash rather than crashing the checker.
+  String money(double? v) => v == null ? '—' : v.toStringAsFixed(4);
   stdout.writeln('rangeCost=${usage.rangeCost.toStringAsFixed(4)} '
-      'todayCost=${usage.todayCost.toStringAsFixed(4)} '
-      'monthCost=${usage.monthlyCost.toStringAsFixed(4)}');
+      'todayCost=${money(usage.todayCost)} '
+      'monthCost=${money(usage.monthlyCost)}');
   stdout.writeln('cacheHitRate=${usage.cacheHitRate.toStringAsFixed(1)}%');
 }

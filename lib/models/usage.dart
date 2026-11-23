@@ -131,8 +131,12 @@ class UsageData {
   /// True when each trend point is one hour rather than one day.
   final bool trendIsHourly;
   final double rangeCost;
-  final double todayCost;
-  final double monthlyCost;
+
+  /// Null while the KPI extras are still in flight: the dashboard prints a dash
+  /// rather than a ¥0.00, which would read as a real measurement. Only a
+  /// completed fetch fills these in.
+  final double? todayCost;
+  final double? monthlyCost;
   final DateTime updatedAt;
 
   UsageData({
