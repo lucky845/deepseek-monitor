@@ -110,6 +110,15 @@ TARGETS = {
     },
 }
 
+# pubspec.yaml 也声明了同一个 Roboto 子集（fonts/roboto/v20/...），因为
+# Flutter 只有在 FontManifest 已有 "Roboto" family 时，才肯跳过它自己那份
+# 167.7 KB 全量兜底字体（_bundleLocalRobotoFallback 的 hasRobotoFamily 提前返回）。
+# 两份必须是同一字节，否则浏览器会拿到一个不是这里校验过的字体。
+# 重建时由 rebuild() 同步，--check 校验两者一致。
+MIRROR = {
+    "roboto": ROOT / "fonts" / "roboto" / "v20" / "KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf",
+}
+
 # 安全垫：常见符号，避免以后文案里多一个「——」或「《》」就渲染成方块。
 # 汉字一律由 lib/ 扫描得出，这里只补符号。
 #
@@ -541,6 +550,21 @@ def check() -> int:
             problems.append(f"{name}: 产物哈希与 {INFO_PATH.name} 不匹配"
                             f"（记录 {recorded[:12]}，实际 {actual[:12]}）——字体被手工改过或子集未重建")
 
+    # pubspec.yaml 声明的是 MIRROR 那份；它和子集产物必须逐字节相同。
+    for name, mirror in MIRROR.items():
+        dst = TARGETS[name]["dst"]
+        if not dst.exists():
+            continue
+        if not mirror.exists():
+            problems.append(
+                f"{name}: 缺少 pubspec 引用的副本 {mirror.relative_to(ROOT)}"
+                f"——Flutter 会退回它自己那份 167.7 KB 全量 Roboto。"
+                "重跑本脚本即可生成")
+        elif sha256(mirror) != sha256(dst):
+            problems.append(
+                f"{name}: {mirror.relative_to(ROOT)} 与 {dst.relative_to(ROOT)} 不一致"
+                "——两份必须同字节，重跑本脚本同步")
+
     live = [cfg["dst"] for cfg in TARGETS.values() if cfg["dst"].exists()]
     # 3.45+ 的 web 构建走 v37 分片（web 上引擎不再请求 v36 ttf）；把它们并入覆盖集，
     # 这样「v36 桌面」与「v37 web」两套链路任一满足 lib 用字都算通过。
@@ -602,6 +626,11 @@ def rebuild() -> int:
             cmap = sorted(TTFont(str(cfg["src"]), lazy=True).getBestCmap().keys())
             build(cfg["src"], cfg["dst"], hinting=False, keep_layout=False, unicodes=cmap)
         rows.append((name, cfg["role"], before, cfg["dst"].stat().st_size))
+
+    # pubspec.yaml 指向的副本：同一字节，否则浏览器拿到的不是这里校验过的字体。
+    for name, mirror in MIRROR.items():
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        mirror.write_bytes(TARGETS[name]["dst"].read_bytes())
 
     CHARSET_PATH.parent.mkdir(parents=True, exist_ok=True)
     CHARSET_PATH.write_text(text, encoding="utf-8")

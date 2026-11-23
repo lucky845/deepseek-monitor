@@ -222,30 +222,115 @@ void main() {
       }
     });
 
-    // web/index.html preloads the CJK fallback because the engine only asks for
-    // it after the first frame. The hint names the font by the hash the engine
-    // generated, so a Flutter upgrade that changes that hash would turn the
-    // hint into a 404 and quietly put the font back on the slow path.
-    test('the preload hint points at the font the browser will fetch', () {
+    // web/index.html preloads every slice the first screen draws, because the
+    // engine only asks for a slice after it hits a missing glyph — by then the
+    // first frame is long past and the UI sits there with blank text until the
+    // fonts land (measured: 7.3s on Fast 4G). Preloading only some slices does
+    // NOT help: the engine still waits for the missing-glyph moment before
+    // requesting the rest, so the late batch arrives just as late as before.
+    // Either preload the whole first-screen set or preload nothing.
+    //
+    // The hints name slices by the hash the engine generated, so a Flutter
+    // upgrade that changes that hash turns them into 404s and quietly puts the
+    // fonts back on the slow path. Hence: every href must exist on disk.
+    test('the preload hints point at slices the browser will fetch', () {
       final html = File('${root.path}/web/index.html').readAsStringSync();
-      final hint = RegExp(r'<link[^>]*rel="preload"[^>]*>').firstMatch(html);
-      expect(hint, isNotNull,
-          reason: 'without this hint the CJK fallback starts downloading only '
-              'after the first frame — ~3.4s later on 4G, and the swap reflows '
-              'the page once it lands');
-      final href =
-          RegExp(r'href="([^"]+)"').firstMatch(hint!.group(0)!)!.group(1)!;
+      final hints = RegExp(r'<link[^>]*rel="preload"[^>]*>')
+          .allMatches(html)
+          .map((m) => RegExp(r'href="([^"]+)"').firstMatch(m.group(0)!)!.group(1)!)
+          .where((h) => h.contains('notosanssc'))
+          .toList();
+
+      expect(hints, isNotEmpty,
+          reason: 'without these hints the CJK fallback slices start '
+              'downloading only after the first frame — measured 7.3s on '
+              'Fast 4G, and the UI shows blank text until they land');
+
       final slicesDir = info['slices.dir'];
       expect(slicesDir, isNotNull,
           reason: 'SUBSET_INFO.txt must name the v37 slice directory');
-      expect(
-        href.startsWith(slicesDir!.replaceFirst('web/', '')),
-        isTrue,
-        reason: 'the hint preloads $href but should point into '
-            '${slicesDir.replaceFirst('web/', '')} for Flutter 3.45+ slices',
-      );
-      expect(File('${root.path}/web/$href').existsSync(), isTrue,
-          reason: 'web/$href is what every visitor preloads');
+      final relDir = slicesDir!.replaceFirst('web/', '');
+
+      for (final href in hints) {
+        expect(
+          href.startsWith(relDir),
+          isTrue,
+          reason: 'the hint preloads $href but should point into '
+              '$relDir for Flutter 3.45+ slices',
+        );
+        expect(File('${root.path}/web/$href').existsSync(), isTrue,
+            reason: 'web/$href is preloaded by every visitor and must exist; '
+                'a Flutter upgrade that changes the slice hash produces a 404 '
+                'here and silently restores the blank-text window');
+      }
+
+      // The hints must cover every slice the first screen actually asks the
+      // engine for. A partial preload is worse than none: it costs bytes while
+      // still leaving the late batch on the slow path.
+      final preloaded = hints.map((h) => h.split('/').last).toSet();
+      final onDisk = Directory('${root.path}/web/$relDir')
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.path.split('/').last)
+          .where((n) => n.endsWith('.woff2'))
+          .toSet();
+      expect(preloaded.difference(onDisk), isEmpty,
+          reason: 'index.html preloads slices that are not shipped');
+
+      // A single hint is the old, ineffective shape: it makes the page pay for
+      // one slice early while the rest still arrive after the first frame.
+      expect(hints.length, greaterThan(1),
+          reason: 'one preload hint does not help — the engine still defers '
+              'the remaining slices until it hits a missing glyph. Preload the '
+              'whole first-screen set or none of it.');
+    });
+
+    // Flutter bundles its own 167.7 KB full Roboto at
+    // assets/fonts/fallback/Roboto-Regular.ttf whenever the build runs with
+    // --no-web-resources-cdn — unless FontManifest already carries a "Roboto"
+    // family. That flag is non-negotiable (without it the browser fetches
+    // canvaskit from www.gstatic.com, which is unreachable from mainland
+    // China), so the way to keep the bundle honest is to declare our own
+    // Roboto subset in pubspec.yaml. Measured on the production HAR: the
+    // unneeded full copy cost 167.7 KB plus one round trip before first paint.
+    //
+    // Deleting that declaration later restores the waste silently. This test
+    // is the guard.
+    test('pubspec declares a Roboto family so Flutter skips its full copy', () {
+      final pubspec = File('${root.path}/pubspec.yaml').readAsStringSync();
+
+      final family = RegExp(
+        r'^\s*-\s*family:\s*Roboto\s*$',
+        multiLine: true,
+      ).hasMatch(pubspec);
+      expect(family, isTrue,
+          reason: 'without an explicit Roboto family in pubspec.yaml, '
+              'flutter_tools injects its bundled 167.7 KB Roboto-Regular.ttf '
+              'at assets/fonts/fallback/ on every --no-web-resources-cdn build, '
+              'and the browser downloads it on first paint');
+
+      // Whatever pubspec points at must exist, and must be the same bytes the
+      // rest of this file checks. A hand-edited copy would ship a font no
+      // coverage test ever looked at.
+      final asset = RegExp(
+        r'-\s*asset:\s*(\S*\.ttf)\s*$',
+        multiLine: true,
+      ).firstMatch(pubspec)?.group(1);
+      expect(asset, isNotNull,
+          reason: 'the Roboto family must name a font asset');
+      final declared = File('${root.path}/$asset');
+      expect(declared.existsSync(), isTrue,
+          reason: 'pubspec points at $asset but the file is not there; '
+              'run tool/subset_web_fonts.py to regenerate it');
+      // Byte identity is what the python script enforces (it writes both).
+      // What matters here is that the font the browser actually gets covers
+      // the same glyphs as the one the coverage tests above inspected --
+      // a stale or hand-edited copy would ship unchecked coverage.
+      final declaredCmap = cmapOf(declared.readAsBytesSync());
+      final verifiedCmap = cmapOf(readFont(root, 'roboto', info));
+      expect(declaredCmap.difference(verifiedCmap), isEmpty,
+          reason: '$asset covers fewer glyphs than the subset this file '
+              'verifies; run tool/subset_web_fonts.py to resync it');
     });
   });
 }

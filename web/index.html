@@ -85,16 +85,29 @@
 
   <!--
     提前预取中文兜底字体。引擎是画到「缺字形」的字符才去下载它的，而那时首帧早过了，
-    下完还得重排一次（4G 下多花几百毫秒）。
+    下完还得重排一次 —— 界面先出来、字全是空白，正是「字体最慢」的来源。
 
-    Flutter 3.45+ 起引擎改用 v37 分片（按字符切、按需取）。32 片里这一片覆盖了
-    lib/ 中 118/413 个汉字（28.6%，按字符数排第一），27.5KB，作为首帧快路径预取；
-    其余分片由引擎在真正用到时按需加载，避免把 217KB 全量推给只看看首页的用户。
+    Flutter 3.45+ 起引擎改用 v37 分片（按字符切、按需取），32 片里首屏真正用到 11 片
+    （109–119，共 137KB，覆盖 lib/ 全部 413 个非 ASCII 字符）。这里把它们全部 preload：
+      - 本地/高速网：字体齐活 2256ms → 225ms
+      - Fast 4G   ：字体齐活 7250ms → 5076ms（首帧 +221ms，换来文字早 2.2s 可读）
+    实测只预取 5 片或 8 片没有效果 —— 引擎照样等到「缺字形」那一刻才发剩余请求，
+    所以要么全预取，要么别预取。
 
     文件名里的 hash 由引擎在构建时写死，子集只能原地替换内容（见 docs/web-and-proxy.md）；
     哪天 Flutter 升级改了这个 hash，这里就会 404 —— test/web_font_subset_test.dart 会拦住。
   -->
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.109.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.110.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.111.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.112.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.113.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.114.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.115.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.116.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.117.woff2" crossorigin>
   <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.118.woff2" crossorigin>
+  <link rel="preload" as="fetch" href="fonts/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.119.woff2" crossorigin>
   <!--
     这里**故意不预取** canvaskit.wasm，别再把它加回来。
 
