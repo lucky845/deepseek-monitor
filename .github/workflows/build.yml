@@ -44,8 +44,23 @@ jobs:
       #   （monitor.lucky845.top/platform-api/* -> platform.deepseek.com）。
       #   平台接口不回 CORS 头，浏览器直连必被拦；没有这行，网页端平台令牌
       #   那一路就是死的。反代部署与权限见 docs/web-and-proxy.md。
+      # --wasm 让产物同时包含两套构建，浏览器自行挑：
+      #   dart2wasm + skwasm   首选，渲染跑在 Web Worker 里
+      #   dart2js  + canvaskit 回退，给不支持 WebAssembly GC 的浏览器
+      # 实测（5 轮冷加载，1280x800，本地同源）：
+      #   首帧        364 → 199ms   (-45%)
+      #   TaskDuration 2152 → 240ms (-89%)
+      #   longtask 总  2025 → 54ms  (-97%)  主线程 createImageBitmap 4 次 → 0 次
+      #   传输体积     8.34 → 6.22MB (-25%)
+      # skwasm 把光栅化和位图读回搬出主线程，canvaskit 在 Web 上没有 GPU
+      # backdrop 通道、只能在主线程快照整屏，这才是它卡顿的根因。
+      #
+      # 代价：不支持 WebAssembly GC 的浏览器会走 js 回退，那部分用户要下载
+      # 两套代码（约 8.3MB）。个人站，这个交换划算；要退回来只需删掉 --wasm。
+      # 官方仍标注 "WebAssembly compilation is new"，故保留双构建而非纯 wasm。
       - run: >-
           flutter build web --release
+          --wasm
           --pwa-strategy=none
           --base-href /
           --no-web-resources-cdn
