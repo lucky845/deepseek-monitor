@@ -281,6 +281,40 @@ void main() {
         reason: '缺副本时的兜底应当靠「不设这个 key」，而不是写一个本地绝对路径');
   });
 
+  test('the boot shell is a real dashboard replica that stays off the network', () {
+    // The shell covers the ~2s while both wasms download+compile. It used to be
+    // a centered logo on a plain gradient, so the canvas swap was a visible jump.
+    // It now mirrors the real dashboard layout. But it is a *transient* layer:
+    // any web font or mascot image it references would duplicate a download the
+    // engine already makes (preload as=fetch vs CSS as=font are different cache
+    // entries) — measured +42KB and +100ms on Fast 4G. So it must stay fully
+    // self-contained: system fonts, geometric glyphs, CSS-drawn avatar.
+    expect(html, contains('<div id="boot-skeleton"'),
+        reason: '真壳 DOM 消失了，首屏会退回白屏');
+    for (final marker in <String>[
+      'class="kpi pane', // the eight KPI cards
+      'class="notice pane', // the sample-data notice
+      'class="chip', // the four range chips
+      'class="panel pane', // the Token breakdown
+      'Token 使用分析',
+    ]) {
+      expect(html, contains(marker),
+          reason: '真壳缺少 $marker，画布接管时会跳变');
+    }
+    expect(html, isNot(contains('@font-face')),
+        reason: '真壳不能引 web 字体：与引擎的 as=fetch 预取不是同一缓存项，会重复下载 +42KB');
+    expect(html, isNot(contains('mascot.webp')),
+        reason: '真壳不能引 mascot 图：它本是首帧后才异步加载，提前引用会挤占 wasm 带宽');
+    // The fade-out MUST be a compositor animation, not a JS setTimeout +
+    // transition: the main thread is blocked by wasm compilation when the first
+    // frame arrives, and a style-recalc-driven fade would leave the shell
+    // covering the app for hundreds of ms.
+    expect(html, contains('@keyframes bs-out'),
+        reason: '合成线程淡出动画丢了，wasm 编译长任务会卡住骨架淡出');
+    expect(html, contains('#boot-skeleton[data-done="1"]'),
+        reason: '首帧回调设置 data-done=1 后必须有对应的淡出规则');
+  });
+
   test('the page gates the wasm preloads on the same WasmGC probe as the engine',
       () {
     // index.html is shared by the js and the wasm build. A browser without
