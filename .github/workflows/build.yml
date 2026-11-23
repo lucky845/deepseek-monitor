@@ -61,9 +61,20 @@ jobs:
       # 代价：不支持 WebAssembly GC 的浏览器会走 js 回退，那部分用户要下载
       # 两套代码（约 8.3MB）。个人站，这个交换划算；要退回来只需删掉 --wasm。
       # 官方仍标注 "WebAssembly compilation is new"，故保留双构建而非纯 wasm。
+      # -O4：wasm 侧编译器默认是 -O2，不是遗漏，是 flutter_tools 的有意取舍
+      #   （WasmCompilerConfig.optimizationLevelForBuildMode 的注释：「-O2 uses
+      #   only sound optimizations ... we would prefer soundness here」）。
+      #   换 -O4 等于放弃 wasm 编译器的 soundness 检查，换来实测：
+      #     main.dart.wasm 2,457,614 → 2,383,758 B（gzip 911,115 → 887,280，-2.6%）
+      #     main.dart.js   3,062,049 → 2,926,070 B（gzip 901,266 → 861,135，-4.5%）
+      #   js 侧本来就默认 -O4，所以老构建一直是「js O4 + wasm O2」。
+      #   首帧实测（本地 HTTP/2，同轮配对）：Fast4G -23ms 8/8、Slow3G -112ms 5/5、
+      #   宽带在噪声内（-1ms）。体积 1,186,506 → 1,162,671 B。
+      #   回退方式：删掉这一行参数即可，无需改别的。
       - run: >-
           flutter build web --release
           --wasm
+          -O4
           --pwa-strategy=none
           --base-href /
           --no-web-resources-cdn
