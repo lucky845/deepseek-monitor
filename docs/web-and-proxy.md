@@ -93,3 +93,80 @@ uv run --no-project --with fonttools python tool/subset_web_fonts.py --refresh-m
 想消掉这一次往返，加一条 Cache Rule：匹配 `URI Path starts with /canvaskit/`，设 `Cache eligibility: Eligible for cache`，**Edge TTL 保持默认（跟随源站）**。别把 Edge TTL 调长：`canvaskit.wasm` 这个名字不带 hash，Flutter 升级换了引擎之后，长 TTL 会让边缘一直把旧 wasm 发给新的 `main.dart.js`。
 
 结论：**Web 版只要前面有一个反代，就是完整功能**（余额 + 用量 + 费用 + 趋势 + 多 Key 对比）；直连静态托管的 Web 只能读余额，那就用客户端。
+
+## 首帧传输字节已经到下限了
+
+首帧（Flutter 画出第一帧）之前要下的字节，线上实测 **2,441,135B / 27 个请求**，其中：
+
+| bytes | 占比 | 是什么 |
+| --- | --- | --- |
+| 1,226,791 | 50.3% | `skwasm.wasm`（gstatic，br） |
+| 897,809 | 36.8% | `main.dart.wasm`（本站，gzip） |
+| 181,493 | 7.4% | 字体（Roboto + 11 片 Noto） |
+| 68,715 | 2.8% | 两张 mascot（异步，在首帧之后） |
+| 10,871 | 0.4% | Cloudflare 自己的 beacon + rum |
+
+两个 wasm 合计 **87%**。所以别再往业务代码上找了：按 source map 的字节归属，`lib/` 只占 wasm 可归因字节的 **2.9%（44,458B）**，97% 是 Flutter/Dart SDK；`flutter_inappwebview` 合计不到 600B、`liquid_glass_easy` 121B、`fl_chart` 3,011B——砍依赖对体积没有意义。
+
+已经做过的、有效的：
+
+- `-O4`（见 `.github/workflows/build.yml` 注释）：wasm gzip 911,115 → 887,280、js gzip 901,266 → 861,135。
+- 引擎 wasm 走 gstatic（见 `web/flutter_bootstrap.js` 顶部）：本站 CF 只能拿到源站**已经 gzip 过**的流再压一遍，1,551,371B → gstatic 的 br11 1,225,993B。
+- 11 片 Noto 预载 + 启动链 10 条预取。
+
+已经试过、明确无效的：
+
+- `wasm-opt --all-features -Oz`（binaryen 133）：raw −1.5%，但 **gzip 只 −0.2%**，还要多一个构建后处理步骤。不做。
+- 剥 wasm 符号段：`main.dart.wasm` 只剩一个 9B 的 `name` custom 段（已 strip），`skwasm.wasm` 一个都没有。
+- 按需/延迟加载 wasm：`dart compile wasm` 没有 deferred 参数。
+- jsDelivr 当 wasm 托管：`curl -4` 五次全部 `size=0`（104.16.180.112 / 104.16.179.112 都连不上），IPv6 走 Fastly 能下但 total 15s。目标网络里不可用。
+
+### 那 198KB 卡在哪：源站只发 gzip
+
+生产 `main.dart.wasm` 的四种编码实测：
+
+| Accept-Encoding | 返回 | 字节 |
+| --- | --- | --- |
+| identity | `ce=none` | 2,383,851 |
+| gzip | `ce=gzip` | 896,373 |
+| br | `ce=br` | 873,256 |
+| zstd | `ce=zstd` | 885,697 |
+| `gzip, deflate, br, zstd`（Chrome 实际发的） | **`ce=gzip`** | 896,373 |
+
+浏览器拿到的永远是 gzip 那 896KB，而且这个 br 只比 gzip 省 2.6%——不是 br 该有的水平。原因是链路：
+
+- GitHub Pages 源站**只发 gzip**（`curl --resolve monitor.lucky845.top:443:185.199.109.153` 直连实测：identity 200 原始字节、gzip 200、br/zstd 都不支持）。
+- Cloudflare 拿到的是这条 gzip 流，只能**对它再压一遍**，br 质量实际落在 q≈4。
+- 本地 zlib 精确复现：`br11(gzip9(raw))` = 881,544，与线上 873,256 只差 1.0%；而 `br11(raw)` = **698,134**（−21.3%）。差的这 21% 就是这样丢掉的。
+
+对照组证明这不是 Cloudflare 的能力问题：`cdn.jsdelivr.net/npm/canvaskit-wasm@0.39.1/bin/canvaskit.wasm` 同一个 Cloudflare，identity 6,786,717 → gzip 2,760,302 → **br 2,157,170**（br 比 gzip 省 21.8%），因为它的源站给的是原始流。
+
+### 拿到这 198KB 值多少
+
+同一份 `build/web` 起两臂、只换 `main.dart.wasm` 的编码，同轮交替、配对相减（本地 HTTP/2，CDP 节流）：
+
+| 档位 | gzip 首帧 | br11 首帧 | 配对中位 | 轮次 |
+| --- | --- | --- | --- | --- |
+| Fast 4G（9Mbps/40ms） | 2229ms | 2065ms | **−165ms** | 6/6 |
+| Slow 3G（1.6Mbps/100ms） | 11573ms | 10625ms | **−948ms** | 4/4 |
+| 宽带（40Mbps/20ms） | — | — | 落在 gstatic 网络抖动里 | 2/5 |
+
+宽带那档测不出，是因为 gstatic 的 `skwasm.wasm` 走公网、完成时刻本身就在 ±100ms 抖，把 195KB 的差淹了。把两臂都改成同源、两个 wasm 一起走 br11 再测（隔离掉公网抖动）：
+
+| 档位 | gzip 首帧 | br11 首帧 | 配对中位 | 轮次 |
+| --- | --- | --- | --- | --- |
+| 宽带 | 706ms | 665ms | **−64ms** | 6/6 |
+| Fast 4G | 2509ms | 2060ms | **−447ms** | 6/6 |
+| Slow 3G | 13043ms | 10547ms | **−2510ms** | 3/3 |
+
+注意这一组 gzip 臂的 `skwasm.wasm` 是 1,536,881B，比线上（gstatic br）的 1,225,993B 更重，所以 −447 / −2510 **高估了**真实收益。真实换托管的收益就是上一张表：**Fast 4G −165ms、Slow 3G −948ms**（`skwasm` 那份已经由 gstatic 用 br11 送着了，换源站拿不到额外好处）。
+
+### 想拿到这 198KB，只有一条路
+
+让**源站对 CF 发原始流**，CF 的自动 br 才会按 q11 压。GitHub Pages 做不到（它强制 gzip）。可选：
+
+1. 换到源站发 identity 的托管（Cloudflare Pages / 对象存储 + 自定义域）。CI 形状不变，Pages 的构建命令照抄 `.github/workflows/build.yml`。**这一条还没实测过 Pages 对 `.wasm` 到底给不给 br，要先做一次 spike 再决定迁不迁。**
+2. 保持现状。首帧在 Fast 4G 是 2449ms、Slow 3G 是 11813ms，已经贴着「字节下限 + 编译 ~110ms」在跑（实测首帧 − 最大 wasm 完成时刻 只有 111ms），没有别的余量了。
+
+补一条容易踩错的：`.wasm` 不带 hash，改托管/CDN 规则时别给 `.wasm` 调长 Edge TTL，否则 Flutter 升级后边缘会把旧 wasm 发给新的 `main.dart.js`。
+
