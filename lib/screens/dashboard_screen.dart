@@ -239,6 +239,13 @@ UsageData displayData({
 String balanceLabel(double? total) =>
     total == null ? '—' : '¥${total.toStringAsFixed(2)}';
 
+/// A KPI figure that may not have arrived yet.
+///
+/// The page paints the window's numbers before the KPI extras resolve, so these
+/// two cells are briefly unknown. A dash says "not measured yet"; ¥0.00 would
+/// claim a measurement nobody took.
+String _money(double? v) => v == null ? '—' : '¥${v.toStringAsFixed(2)}';
+
 /// What a screen is allowed to be. A phone gets one slice at a time; a desktop
 /// gets the whole ledger, because there is room to compare panels side by side.
 class DashboardLayout {
@@ -884,7 +891,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       _kpiCell(
         label: '今日花费',
-        value: '¥${data.todayCost.toStringAsFixed(2)}',
+        value: _money(data.todayCost),
         note: '自 0 点起',
         sample: usageIsSample,
       ),

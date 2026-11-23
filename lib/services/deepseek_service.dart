@@ -171,8 +171,22 @@ class DeepSeekService {
   /// Fetch usage for [start, end) with daily buckets, split by API key and by
   /// model. Both platform endpoints report the same (key x model) shape, so we
   /// join them on it and keep the finest granularity the API offers.
+  /// Fetch usage for [start, end).
+  ///
+  /// [onMainReady] fires as soon as the window's own numbers are known — the
+  /// per-key breakdown, trend and range cost — without waiting for the KPI
+  /// extras (today/month cost and the account summary). On the production HAR
+  /// the extras land ~340ms after the window batch, and the page used to sit on
+  /// a spinner for all of it. The callback lets the dashboard paint real
+  /// numbers first and let the KPI cards fill in.
+  ///
+  /// The partial payload marks the extras as *unknown* rather than zero: the
+  /// KPI row prints a dash for them, never a ¥0.00 that reads like a real
+  /// measurement. Only the final [UsageData] carries the settled figures.
   Future<UsageData> fetchUsage(
-      {required DateTime start, required DateTime end}) async {
+      {required DateTime start,
+      required DateTime end,
+      void Function(UsageData partial)? onMainReady}) async {
     if (token == null) {
       return UsageData(
         apiKeys: const [],
@@ -190,15 +204,36 @@ class DeepSeekService {
     final costUri = Uri.parse(
         '$_platformBase/api/v0/usage/by_api_key/cost?start=$startSec&end=$endSec&tz=$tzOffsetSeconds');
 
-    final responses = await Future.wait([
-      _get(amountUri),
-      _get(costUri),
-    ]);
-    final amountJson = _platformEnvelope(responses[0], '用量接口');
+    // Today + month figures always come from their own windows so the KPIs stay
+    // meaningful regardless of the selected range. They depend on nothing the
+    // window requests return, so they go out at the same moment instead of
+    // after them: measured on the production HAR, chaining the two batches cost
+    // a whole extra round trip (~375ms) before the KPI calls even started, and
+    // the summary alone then took another ~690ms.
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final monthStart = DateTime(now.year, now.month, 1);
+    final monthEnd = DateTime(now.year, now.month + 1, 1);
+
+    // All five go out now — they depend on nothing the others return. But they
+    // are *awaited* in two groups: the window pair drives every panel the user
+    // is looking at, while the KPI extras (today/month cost, account summary)
+    // only fill the top row. Awaiting all five before painting cost the user a
+    // full extra round trip on the production HAR (batch A ended at 1594ms, the
+    // extras only started at 1625ms).
+    final amountFut = _get(amountUri);
+    final costFut = _get(costUri);
+    final todayFut = _costOf(todayStart, todayStart.add(const Duration(days: 1)));
+    final monthFut = _costOf(monthStart, monthEnd);
+    final summaryFut = _summaryOrNull();
+
+    final amountResp = await amountFut;
+    final costResp = await costFut;
+    final amountJson = _platformEnvelope(amountResp, '用量接口');
     Map<String, dynamic> costJson = <String, dynamic>{};
-    if (responses[1].statusCode == 200) {
+    if (costResp.statusCode == 200) {
       try {
-        costJson = _platformEnvelope(responses[1], '费用接口');
+        costJson = _platformEnvelope(costResp, '费用接口');
       } on DeepSeekException {
         // A missing price breakdown should not fail the whole page: the token
         // counts are still worth showing.
@@ -330,23 +365,22 @@ class DeepSeekService {
         .toList()
       ..sort((a, b) => a.at.compareTo(b.at));
 
-    // Today + month figures always come from their own windows so the KPIs stay
-    // meaningful regardless of the selected range.
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final monthStart = DateTime(now.year, now.month, 1);
-    final monthEnd = DateTime(now.year, now.month + 1, 1);
-    final todayCost =
-        await _costOf(todayStart, todayStart.add(const Duration(days: 1)));
-    final monthlyCost = await _costOf(monthStart, monthEnd);
-    // The balance is decoration on top of the usage report. If that single call
-    // fails, still show the usage rather than blanking the whole screen.
-    UserSummary? summary;
-    try {
-      summary = await fetchSummary();
-    } on DeepSeekException {
-      summary = null;
-    }
+    // Everything the page's own panels need is known. Publish it before the
+    // KPI extras resolve, so the numbers appear while today/month/summary are
+    // still in flight.
+    onMainReady?.call(UsageData(
+      apiKeys: apiKeys,
+      trend: trend,
+      trendIsHourly: hourly,
+      rangeCost: totalCost,
+      todayCost: null,
+      monthlyCost: null,
+      updatedAt: DateTime.now(),
+    ));
+
+    final todayCost = await todayFut;
+    final monthlyCost = await monthFut;
+    final summary = await summaryFut;
 
     return UsageData(
       summary: summary,
@@ -378,6 +412,16 @@ class DeepSeekService {
       return sum;
     } catch (_) {
       return 0;
+    }
+  }
+
+  /// The balance is decoration on top of the usage report. If that single call
+  /// fails, still show the usage rather than blanking the whole screen.
+  Future<UserSummary?> _summaryOrNull() async {
+    try {
+      return await fetchSummary();
+    } on DeepSeekException {
+      return null;
     }
   }
 
