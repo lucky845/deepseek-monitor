@@ -141,7 +141,7 @@ void main() {
     // 2.5MB of payload sits idle. Preloading all five at parse time measured
     // -316ms on Fast 4G and -339ms on broadband (paired, same HTTP/2 server).
     final links = injectedLinks(html);
-    expect(links, hasLength(5), reason: '预取清单被改动，请同步更新注释与实测数据');
+    expect(links, hasLength(10), reason: '预取清单被改动，请同步更新注释与实测数据');
 
     final byHref = {for (final l in links) l[2]!: l};
     expect(byHref.keys, containsAll(<String>[
@@ -164,6 +164,40 @@ void main() {
     // Same-origin only, or the preload burns a connection to another host.
     for (final href in byHref.keys) {
       expect(href.startsWith('http'), isFalse, reason: '$href 必须是同源路径');
+    }
+  });
+
+  test('the font and manifest tail is preloaded too, aft of the wasm chain', () {
+    // Once the engine has its wasm it still walks a serial chain of tiny
+    // requests — FontManifest.json (298B) -> the three font files ->
+    // AssetManifest.bin.json — each waiting for the previous round trip. On the
+    // production page the manifest only completed at 1542->1781ms, after every
+    // wasm had already arrived. Preloading the five measured -86ms on Fast 4G,
+    // -45ms on broadband and -193ms on Slow 3G with zero extra bytes.
+    final links = injectedLinks(html);
+    final byHref = {for (final l in links) l[2]!: l};
+
+    const tail = <String>[
+      'assets/FontManifest.json',
+      'assets/AssetManifest.bin.json',
+      'assets/fonts/MaterialIcons-Regular.otf',
+      'assets/fonts/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf',
+      'assets/packages/cupertino_icons/assets/CupertinoIcons.ttf',
+    ];
+
+    for (final href in tail) {
+      expect(byHref.containsKey(href), isTrue,
+          reason: '$href 掉出了预取清单，后段会退回串行 RTT');
+      // JSON/font payloads are not scripts: preload as=fetch is the only rel
+      // that both warms the HTTP cache and stays invisible to the module graph.
+      expect(byHref[href]![0], 'preload', reason: '$href 必须用 preload');
+      expect(byHref[href]![1], 'fetch', reason: '$href 必须以 fetch 预取');
+      // CanvasKit fetches fonts in CORS mode; a preload without crossorigin
+      // is no-cors and therefore a *different* cache entry, which would make
+      // the engine download the file a second time. Measured: keeping it gives
+      // 23 requests / 2,739,484B in both arms -- no duplicate fetch.
+      expect(byHref[href]![3], 'true',
+          reason: '$href 必须带 crossorigin，否则与引擎的 CORS 抓取不是同一条缓存项');
     }
   });
 
