@@ -33,8 +33,11 @@ python3 tool/dev_proxy.py --port 8788 --host 0.0.0.0 --root build/web
 也可以把地址编译进产物，适合长期自建的部署：
 
 ```bash
-flutter build web --release --dart-define=PLATFORM_API_BASE=https://你的反代域名/platform-api
+flutter build web --release --wasm -O4 \
+  --dart-define=PLATFORM_API_BASE=https://你的反代域名/platform-api
 ```
+
+`--wasm` 与 `-O4` 是线上在用的组合：wasm 侧编译器默认 **-O2**（flutter_tools 有意只开 sound 优化），提到 -O4 换到 gzip 后 wasm 少 2.6%、js 少 4.5%，首帧在受限带宽下明显更快；代价是放弃 wasm 编译器的 soundness 检查。理由与实测数字见 `.github/workflows/build.yml` 里那段注释，有测试盯着它（`test/web_build_flags_test.dart`）。
 
 **线上（monitor.lucky845.top）已经这么配了**：CI 构建带 `--dart-define=PLATFORM_API_BASE=https://monitor.lucky845.top/platform-api`，反代是一个 Cloudflare Worker（`platform-api-proxy`），zone `lucky845.top` 上的 route `monitor.lucky845.top/platform-api/*` 把请求转发到 `platform.deepseek.com`，并补上 `Access-Control-Allow-Origin`。Worker 源码在 [tool/cloudflare_worker/platform-api-proxy.js](../tool/cloudflare_worker/platform-api-proxy.js)；改动用 API Token 调 `PUT /accounts/{id}/workers/scripts/platform-api-proxy`（multipart，注意 `Content-Disposition` 必须带 `form-data;` 前缀）+ `POST /zones/{id}/workers/routes`。平台对无 User-Agent 的请求回 429，所以反代必须透传浏览器 UA。
 
