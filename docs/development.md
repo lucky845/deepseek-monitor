@@ -46,7 +46,7 @@ export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"
 fvm flutter run -d macos --debug
 ```
 
-- 不想装 FVM 也可以 `brew install --cask flutter` 直接用，但 brew 装的是最新 stable，和 CI 固定的 3.24.5 有版本差，`pub get` 会提示升级一批依赖。
+- 不想装 FVM 也可以 `brew install --cask flutter` 直接用，但 brew 装的是最新 stable，和 CI 固定的 3.47.9 有版本差，`pub get` 会提示升级一批依赖。
 
 - `xcode-select -p` 必须是 `/Applications/Xcode.app/Contents/Developer`。指向 `/Library/Developer/CommandLineTools` 时，gem 的原生扩展编译不出来。
 - 不要用管道判断 gem 是否成功：`gem install ... 2>&1 | tail -40` 的退出码是 `tail` 的，失败也会显示 0。
@@ -99,7 +99,7 @@ DS_TOKEN=你的平台令牌 dart run tool/live_check.dart
 
 ## 测试覆盖
 
-100 个测试，按它们保护的东西分组：
+122 个测试，按它们保护的东西分组：
 
 **接口解析**
 

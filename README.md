@@ -9,8 +9,9 @@
 一套 Flutter 代码，六个平台：Android · iOS · macOS · Windows · Linux · Web
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3DA639.svg?style=flat-square)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.24.5-54C5F8.svg?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Tests](https://img.shields.io/badge/tests-104%20passing-2EA043.svg?style=flat-square)](#开发)
+[![Version](https://img.shields.io/badge/version-v1.1.0-6C8BFF.svg?style=flat-square)](https://github.com/lucky845/deepseek-monitor/releases/latest)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.9-54C5F8.svg?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Tests](https://img.shields.io/badge/tests-122%20passing-2EA043.svg?style=flat-square)](#开发)
 [![Analyze](https://img.shields.io/badge/analyze-0%20issues-2EA043.svg?style=flat-square)](#开发)
 [![Platforms](https://img.shields.io/badge/platforms-android%20%7C%20ios%20%7C%20macos%20%7C%20windows%20%7C%20linux%20%7C%20web-5C6BC0.svg?style=flat-square)](#平台支持)
 
@@ -91,6 +92,18 @@ Linux 和 Web 不支持应用内登录，因为 `flutter_inappwebview` 在这两
 
 想让它显示真实余额，在「连接账号」里填入 **API Key** 即可——`api.deepseek.com` 支持跨域，静态托管上也能直接读。**平台令牌**那一路需要反代，原因见 [docs/web-and-proxy.md](docs/web-and-proxy.md)。
 
+### 下载安装
+
+不想自己编译的话，[GitHub Releases](https://github.com/lucky845/deepseek-monitor/releases/latest) 提供各平台的预编译产物：
+
+| 平台 | 产物 |
+|---|---|
+| Android | `deepseek_monitor-android.apk` |
+| iOS | `DeepSeekMonitor-iOS.ipa`（未签名，装真机需重签名） |
+| macOS | `DeepSeekMonitor-macOS.dmg` |
+
+Web 端直接用上面的在线体验即可，无需下载。Windows / Linux 请按下面的脚本自行构建。
+
 ### 本地运行
 
 ```bash
@@ -158,7 +171,7 @@ Web 端不在脚本中处理，由 GitHub Actions 构建并部署到 GitHub Page
 ```bash
 flutter pub get
 flutter analyze     # 0 issues
-flutter test        # 104 个测试
+flutter test        # 122 个测试
 ```
 
 测试按它们**保护的东西**分组，不按文件分组：接口解析与降级、绝不用示例数据冒充真实数据、凭据的手感（遮蔽 / 不回填 / 按平台说话）、布局与窗口数学、小组件快照自洽。逐条清单见 [docs/development.md](docs/development.md)。
