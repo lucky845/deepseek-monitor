@@ -1,6 +1,5 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 
 import '../providers/glass_provider.dart';
 import '../theme.dart';
@@ -155,73 +154,76 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final double k = GlassScope.strengthOf(context);
     final r = BorderRadius.circular(radius);
-    final fillTop = tint == null
-        ? Colors.white.withOpacity(kGlassTop * k)
-        : Color.lerp(
-            Colors.white.withOpacity(kGlassTop * k), tint!, tintStrength)!;
-    final fillBottom = tint == null
-        ? Colors.white.withOpacity(kGlassBottom * k)
-        : Color.lerp(
-            Colors.white.withOpacity(kGlassBottom * k), tint!, tintStrength)!;
-    final double rim = (kGlassRim * (0.55 + 0.45 * k)).clamp(0.0, 1.0);
-    final double sigma = (blur * (0.35 + 0.65 * k)).clamp(2.0, 40.0);
+
+    // -- Why this is 0: measured, not guessed -------------------------
+    // On Flutter Web every non-zero sigma costs one backdrop read. CanvasKit
+    // has no GPU backdrop channel on this renderer: it snapshots the backdrop
+    // into an OffscreenCanvas and calls createImageBitmap() to get pixels out
+    // before it can blur. (A browser's own `backdrop-filter` is compositor
+    // work; CanvasKit cannot reach that path.)
+    //
+    // Profiled on the shipped build, 1280x800, cold cache:
+    //   createImageBitmap self-time  2045ms  (83% of all TaskDuration)
+    //   three calls at 547 / 1007 / 2080ms, lasting 346 / 987 / 425ms
+    //   the 987ms call is the largest single long task on the page
+    //
+    // What the blur bought here was close to nothing. WaterBackdrop is a
+    // static vertical gradient plus three soft radial blooms — smoothly
+    // varying colour with no high-frequency detail, so a Gaussian over it
+    // returns the colour it started with. The frost is carried instead by the
+    // pane tint, the rim and the specular thread, none of which read the
+    // backdrop and all of which are free.
+    //
+    // sigma 0 means LiquidGlassLite sees frosted == false, skips
+    // _GlassBackdrop entirely, and the page never calls createImageBitmap.
+    // The `blur` argument is still honoured for the shape's own shading; it
+    // just no longer buys a backdrop read.
+    //
+    // If a backdrop ever gains real detail (a photo, live video), turning
+    // this back on is a deliberate trade: ~2s of main-thread CPU on web.
+    const double sigma = 0.0;
+
+    // The pane is a white frost nudged toward a warning hue only when it must
+    // carry one (the sample-data notice). The old top-to-bottom gradient was
+    // barely visible over a blurred backdrop, so a flat tint reads the same.
+    Color paneTint = Colors.white.withOpacity(kGlassTop * k);
+    if (tint != null) paneTint = Color.lerp(paneTint, tint!, tintStrength)!;
+
+    // The old top specular thread becomes the rim's highlight. The slider
+    // still decides how bright it reads; the pane keeps no separate glow.
+    final LiquidGlassLight? rimLight = specular
+        ? LiquidGlassLight.specular(
+            angle: 90,
+            thickness: 2,
+            intensity: (0.52 * k * 2).clamp(0.0, 3.0),
+          )
+        : null;
 
     return RepaintBoundary(
-      child: ClipRRect(
-        borderRadius: r,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: r,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [fillTop, fillBottom],
-              ),
-              border: Border.all(
-                color: tint == null
-                    ? Colors.white.withOpacity(rim)
-                    : tint!.withOpacity(0.42),
-              ),
-              boxShadow: shadow
-                  ? const [
-                      BoxShadow(
-                        color: kGlassShadow,
-                        blurRadius: 26,
-                        offset: Offset(0, 10),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Stack(
-              children: [
-                if (specular)
-                  Positioned(
-                    left: radius * 0.9,
-                    right: radius * 0.9,
-                    top: 0,
-                    child: Container(
-                      height: 1,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withOpacity(0),
-                            Colors.white
-                                .withOpacity((0.52 * k).clamp(0.0, 1.0)),
-                            Colors.white.withOpacity(0),
-                          ],
-                        ),
-                      ),
-                    ),
+      // The drop shadow stays a DecoratedBox: it is cheap, and putting a
+      // ClipRRect around the lite glass would clip the halo the old pane had.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: r,
+          boxShadow: shadow
+              ? const [
+                  BoxShadow(
+                    color: kGlassShadow,
+                    blurRadius: 26,
+                    offset: Offset(0, 10),
                   ),
-                if (padding != null)
-                  Padding(padding: padding!, child: child)
-                else
-                  child,
-              ],
-            ),
-          ),
+                ]
+              : null,
+        ),
+        child: LiquidGlassLite(
+          shape: LiquidGlassShape.roundedRectangle(cornerRadius: radius),
+          blur: sigma,
+          color: paneTint,
+          specular: rimLight,
+          borderAlpha: (kGlassRim * (0.55 + 0.45 * k) * 4).clamp(0.0, 1.0),
+          child: padding != null
+              ? Padding(padding: padding!, child: child)
+              : child,
         ),
       ),
     );

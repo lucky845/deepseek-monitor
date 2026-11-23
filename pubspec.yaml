@@ -26,6 +26,21 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # Declaring the Roboto family ourselves is what stops Flutter from bundling
+  # its own copy. flutter_tools injects a 167.7 KB full Roboto at
+  # assets/fonts/fallback/Roboto-Regular.ttf whenever --no-web-resources-cdn
+  # is set, but only when FontManifest has no "Roboto" family yet
+  # (_bundleLocalRobotoFallback in build_system/targets/web.dart returns early
+  # on hasRobotoFamily). Tool/subset_web_fonts.py already ships a 54.3 KB
+  # subset that covers every Latin glyph the UI draws, so declaring it here
+  # keeps the bundle honest and saves the browser a download it cannot skip:
+  # measured on the production HAR, that unneeded file cost 167.7 KB and one
+  # round trip on first paint.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf
+
   assets:
     - assets/mascot.webp
     - assets/mascot_head.webp
