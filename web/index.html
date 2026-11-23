@@ -50,14 +50,23 @@
       color: #8FA3C8;
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
-      /* 160ms, not 320ms. Measured on the shipped build: Flutter''s first frame
-         lands at ~191ms and the skeleton only left the DOM at 577ms — 386ms of
-         a full-screen overlay sitting on top of an already-painted UI. A shorter
-         fade still hides the hand-off without holding the user in the splash. */
-      transition: opacity .16s linear;
       will-change: opacity;
     }
-    #boot-skeleton[data-done="1"] { opacity: 0; pointer-events: none; }
+    /* 淡出必须由合成线程驱动，不能靠 transition + JS 定时器。
+       线上实测：data-done=1 在 1259ms 落下时，主线程正被一个 890ms 的 wasm
+       编译长任务占着，样式重算被阻塞——opacity 在 1670ms 仍是 1，而 JS 移除
+       定时器到期后 DOM 直接消失，用户看到的是"骨架僵硬地停 1.2 秒然后跳掉"，
+       渐变一次都没跑过。本地主线程空闲，所以之前测到的 181ms 是假象。
+
+       animation 在合成线程执行，主线程卡住也不影响它起跑。 */
+    @keyframes bs-out {
+      from { opacity: 1; }
+      to { opacity: 0; visibility: hidden; }
+    }
+    #boot-skeleton[data-done="1"] {
+      pointer-events: none;
+      animation: bs-out .18s linear forwards;
+    }
     .bs-logo {
       width: 54px; height: 54px; border-radius: 15px;
       background: linear-gradient(140deg, #4EC2C6, #2E7BF6);
@@ -147,13 +156,14 @@
       function dropSkeleton() {
         var sk = document.getElementById('boot-skeleton');
         if (!sk) return;
+        // 触发 CSS 动画（合成线程执行，主线程卡住也照跑）。
         sk.setAttribute('data-done', '1');
-        // 180ms = the 160ms fade plus a frame of slack. This used to be 380ms,
-        // which kept a full-screen composited layer alive on top of a page that
-        // had already painted its first frame.
+        // DOM 移除只是收尾，不承担"什么时候让用户看到界面"的职责——那件事
+        // 已经交给 animation 了。主线程被长任务占住时这个定时器会晚到，
+        // 但那时骨架早已 opacity=0 且 visibility=hidden，不会挡住界面。
         setTimeout(function () {
           if (sk.parentNode) sk.parentNode.removeChild(sk);
-        }, 180);
+        }, 1200);
       }
       window.__dropBootSkeleton = dropSkeleton;
       setTimeout(dropSkeleton, 30000);
