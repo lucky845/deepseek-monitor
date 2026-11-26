@@ -174,6 +174,35 @@ prepare_dist() {
   mkdir -p "$DIST_DIR"
 }
 
+# --- Release 资产统一命名 ---
+# 规范（参照 AppFlowy 等 Flutter 应用）：DeepSeekMonitor-<版本>-<平台>-<架构>.<ext>
+#   版本：从 pubspec.yaml 的 version 字段读取（去掉 +build number，如 1.1.0+2 -> 1.1.0）
+#   平台：android / ios / macos / linux / windows
+#   架构：universal（APK 含 arm64-v8a/armeabi-v7a/x86_64 三种 ABI）/ arm64 / x86_64
+# 单一出处，避免 release 资产名散落各处、各端不一致。
+APP_NAME="DeepSeekMonitor"
+APP_VERSION="$(sed -n 's/^version:[[:space:]]*\([0-9][0-9.]*\)+.*/\1/p' "$PROJECT_ROOT/pubspec.yaml" | head -1)"
+if [[ -z "$APP_VERSION" ]]; then
+  warn "未能从 pubspec.yaml 读取版本号，资产名将标记为 unknown（请检查 version 字段格式）"
+  APP_VERSION="unknown"
+fi
+
+# asset_name <平台> <架构> <扩展名> -> 输出文件名（不含 dist/ 前缀）
+asset_name() {
+  printf '%s-%s-%s-%s.%s' "$APP_NAME" "$APP_VERSION" "$1" "$2" "$3"
+}
+
+# 探测本机 macOS 架构；arm64 / x86_64 之外的兜底为 uname -m 原值
+host_arch() {
+  local m
+  m="$(uname -m)"
+  case "$m" in
+    arm64|aarch64) printf 'arm64' ;;
+    x86_64|amd64)  printf 'x86_64' ;;
+    *)             printf '%s' "$m" ;;
+  esac
+}
+
 # --- Android ---
 build_android() {
   info "=== 打包 Android (APK, release) ==="
@@ -203,8 +232,11 @@ build_android() {
   fi
   local apk="$PROJECT_ROOT/build/app/outputs/flutter-apk/app-release.apk"
   if [[ -f "$apk" ]]; then
-    cp "$apk" "$DIST_DIR/deepseek_monitor-android.apk"
-    info "Android APK -> dist/deepseek_monitor-android.apk"
+    # 该 APK 是 fat 包，含 arm64-v8a / armeabi-v7a / x86_64 三种 ABI，故标 universal
+    local name
+    name="$(asset_name android universal apk)"
+    cp "$apk" "$DIST_DIR/$name"
+    info "Android APK -> dist/$name"
   else
     warn "Android APK 未找到: $apk"
     return 1
@@ -228,7 +260,9 @@ build_ios() {
   fi
   # 未签名 ipa：标准 Payload/Runner.app 结构打成 zip 再改后缀名。
   # 装真机前需要用自己的描述文件重签名（Xcode 或 iReSign 都可以）。
-  local ipa="$DIST_DIR/DeepSeekMonitor-iOS.ipa"
+  local name
+  name="$(asset_name ios universal ipa)"
+  local ipa="$DIST_DIR/$name"
   local tmpdir
   tmpdir="$(mktemp -d)"
   mkdir -p "$tmpdir/Payload"
@@ -240,7 +274,7 @@ build_ios() {
     return 1
   fi
   rm -rf "$tmpdir"
-  info "iOS ipa -> dist/DeepSeekMonitor-iOS.ipa（未签名，装真机需重签名）"
+  info "iOS ipa -> dist/$name（未签名，装真机需重签名）"
 }
 
 # --- macOS ---
@@ -328,7 +362,9 @@ DeepSeek Monitor · macOS 安装说明
 MACOS_INSTALL_NOTE
 
   # UDZO = 只读 + zlib 压缩：体积小，双击即挂载。
-  local dmg="$DIST_DIR/DeepSeekMonitor-macOS.dmg"
+  local name
+  name="$(asset_name macos "$(host_arch)" dmg)"
+  local dmg="$DIST_DIR/$name"
   rm -f "$dmg"
   if ! hdiutil create -quiet -volname "DeepSeek Monitor" -srcfolder "$stage" -ov -format UDZO "$dmg"; then
     rm -rf "$stage"
@@ -336,7 +372,7 @@ MACOS_INSTALL_NOTE
     return 1
   fi
   rm -rf "$stage"
-  info "macOS dmg -> dist/DeepSeekMonitor-macOS.dmg（含 Applications 快捷方式与安装说明）"
+  info "macOS dmg -> dist/$name（含 Applications 快捷方式与安装说明）"
 }
 
 # --- Linux ---
@@ -353,8 +389,14 @@ build_linux() {
   fi
   local bundle="$PROJECT_ROOT/build/linux/x64/release/bundle"
   if [[ -d "$bundle" ]]; then
-    cp -r "$bundle" "$DIST_DIR/deepseek_monitor-linux"
-    info "Linux bundle -> dist/deepseek_monitor-linux/"
+    local name
+    name="$(asset_name linux x86_64 tar.gz)"
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    cp -r "$bundle" "$tmpdir/DeepSeek Monitor"
+    tar -czf "$DIST_DIR/$name" -C "$tmpdir" "DeepSeek Monitor"
+    rm -rf "$tmpdir"
+    info "Linux bundle -> dist/$name"
   else
     warn "Linux bundle 未找到: $bundle"
     return 1
@@ -376,8 +418,10 @@ build_windows() {
   fi
   local exe="$PROJECT_ROOT/build/windows/x64/runner/Release/deepseek_monitor.exe"
   if [[ -f "$exe" ]]; then
-    cp "$exe" "$DIST_DIR/deepseek_monitor-windows.exe"
-    info "Windows EXE -> dist/deepseek_monitor-windows.exe"
+    local name
+    name="$(asset_name windows x86_64 exe)"
+    cp "$exe" "$DIST_DIR/$name"
+    info "Windows EXE -> dist/$name"
   else
     warn "Windows EXE 未找到: $exe"
     return 1
