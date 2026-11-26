@@ -96,11 +96,13 @@ Linux 和 Web 不支持应用内登录，因为 `flutter_inappwebview` 在这两
 
 不想自己编译的话，[GitHub Releases](https://github.com/lucky845/deepseek-monitor/releases/latest) 提供各平台的预编译产物：
 
+产物命名遵循 `DeepSeekMonitor-<版本>-<平台>-<架构>`，版本与最新 Release 标签一致。
+
 | 平台 | 产物 |
 |---|---|
-| Android | `deepseek_monitor-android.apk` |
-| iOS | `DeepSeekMonitor-iOS.ipa`（未签名，装真机需重签名） |
-| macOS | `DeepSeekMonitor-macOS.dmg` |
+| Android | `DeepSeekMonitor-1.1.0-android-universal.apk`（含三种 ABI，通吃 arm64 / armv7 / x86_64） |
+| iOS | `DeepSeekMonitor-1.1.0-ios-universal.ipa`（未签名，装真机需重签名） |
+| macOS | `DeepSeekMonitor-1.1.0-macos-arm64.dmg`（Apple Silicon；Intel 请自行构建） |
 
 Web 端直接用上面的在线体验即可，无需下载。Windows / Linux 请按下面的脚本自行构建。
 
@@ -213,15 +215,15 @@ tool/                      本地反代与真接口自检
 ./tool/release_build.sh            # 全平台打包，产物在 dist/
 ```
 
-产物收集到 `dist/` 目录，可直接上传到 GitHub Release：
+产物收集到 `dist/` 目录，可直接上传到 GitHub Release。命名由 `release_build.sh` 统一生成：`DeepSeekMonitor-<版本>-<平台>-<架构>.<ext>`，版本自动从 `pubspec.yaml` 读取，架构按实际构建标注（APK 为 universal 三 ABI，macOS 为 arm64/x86_64）。
 
 | 平台 | 产物 |
 |---|---|
-| Android | `dist/deepseek_monitor-android.apk` |
-| iOS | `dist/DeepSeekMonitor-iOS.ipa`（未签名，装真机需重签名） |
-| macOS | `dist/DeepSeekMonitor-macOS.dmg`（内含 Applications 快捷方式与安装说明，拖拽即装） |
-| Linux | `dist/deepseek_monitor-linux/`（bundle） |
-| Windows | `dist/deepseek_monitor-windows.exe` |
+| Android | `dist/DeepSeekMonitor-1.1.0-android-universal.apk` |
+| iOS | `dist/DeepSeekMonitor-1.1.0-ios-universal.ipa`（未签名，装真机需重签名） |
+| macOS | `dist/DeepSeekMonitor-1.1.0-macos-arm64.dmg`（内含 Applications 快捷方式与安装说明，拖拽即装） |
+| Linux | `dist/DeepSeekMonitor-1.1.0-linux-x86_64.tar.gz` |
+| Windows | `dist/DeepSeekMonitor-1.1.0-windows-x86_64.exe` |
 
 Web 端继续由 GitHub Actions 构建并部署到 GitHub Pages（`https://monitor.lucky845.top/`），按根路由构建（`--base-href /`），并关掉 Service Worker。
 
