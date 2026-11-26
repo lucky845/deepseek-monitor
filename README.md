@@ -14,14 +14,14 @@
 [![Tests](https://img.shields.io/badge/tests-122%20passing-2EA043.svg?style=flat-square)](#开发)
 [![Analyze](https://img.shields.io/badge/analyze-0%20issues-2EA043.svg?style=flat-square)](#开发)
 [![Platforms](https://img.shields.io/badge/platforms-android%20%7C%20ios%20%7C%20macos%20%7C%20windows%20%7C%20linux%20%7C%20web-5C6BC0.svg?style=flat-square)](#平台支持)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#开发)
 
 [在线体验](https://monitor.lucky845.top/) · [功能](#功能) · [截图](#截图) · [快速开始](#快速开始) · [文档](#文档)
 
 </div>
 
----
-
-打开就能看：默认进入仪表盘并展示**示例数据**，不登录也能体验全部界面。点右上角「连接账号」接上自己的账户，数字才会变成真的——并且每一块数据都会标明自己是真的还是示例的。
+> [!NOTE]
+> **打开就能看，不假装自己知道。** 默认进入仪表盘并展示**示例数据**，不登录也能体验全部界面；点右上角「连接账号」接上自己的账户后数字才会变成真的，并且每块数据都会标明自己是真的还是示例的。
 
 ---
 
@@ -139,6 +139,7 @@ Web 端不在脚本中处理，由 GitHub Actions 构建并部署到 GitHub Page
 
 应用**不接触你的账号密码**，只处理两种凭据，且验证通过才落盘。
 
+> [!TIP]
 > 「平台令牌」就是页面每次请求自带的 `Authorization: Bearer <值>` 里的那个值——在 devtools 的 **Network → Request Headers** 里找，不在 Application → Local Storage。
 
 | 方式 | 能看到什么 | 怎么做 |
