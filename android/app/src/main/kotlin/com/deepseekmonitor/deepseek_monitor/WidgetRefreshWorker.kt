@@ -8,6 +8,10 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -76,23 +80,30 @@ class WidgetRefreshWorker(
     }
 
     /** Platform token: the full picture, using the same windows as the app. */
-    private fun snapshotFromPlatform(token: String, base: String): JSONObject {
+    private suspend fun snapshotFromPlatform(token: String, base: String): JSONObject =
+        coroutineScope {
         val tz = tzOffsetSeconds()
         val monthStart = startOfMonthSeconds()
         val monthEnd = startOfNextMonthSeconds()
         val dayStart = startOfTodaySeconds()
         val dayEnd = dayStart + 86_400L
 
-        val summary = getJson("$base/api/v0/users/get_user_summary", token)
-        val monthAmount = getJson(
-            "$base/api/v0/usage/by_api_key/amount?start=$monthStart&end=$monthEnd&tz=$tz", token
-        )
-        val monthCost = getJson(
-            "$base/api/v0/usage/by_api_key/cost?start=$monthStart&end=$monthEnd&tz=$tz", token
-        )
-        val todayCost = getJson(
-            "$base/api/v0/usage/by_api_key/cost?start=$dayStart&end=$dayEnd&tz=$tz", token
-        )
+        // Four independent reads: run them together on the IO pool instead of
+        // paying four round trips back-to-back. `awaitAll` rethrows the first
+        // failure, which doWork() already turns into a bounded retry.
+        val summaryUrl = "$base/api/v0/users/get_user_summary"
+        val monthAmountUrl =
+            "$base/api/v0/usage/by_api_key/amount?start=$monthStart&end=$monthEnd&tz=$tz"
+        val monthCostUrl =
+            "$base/api/v0/usage/by_api_key/cost?start=$monthStart&end=$monthEnd&tz=$tz"
+        val todayCostUrl =
+            "$base/api/v0/usage/by_api_key/cost?start=$dayStart&end=$dayEnd&tz=$tz"
+        val (summary, monthAmount, monthCost, todayCost) = listOf(
+            async(Dispatchers.IO) { getJson(summaryUrl, token) },
+            async(Dispatchers.IO) { getJson(monthAmountUrl, token) },
+            async(Dispatchers.IO) { getJson(monthCostUrl, token) },
+            async(Dispatchers.IO) { getJson(todayCostUrl, token) },
+        ).awaitAll()
 
         val biz = summary.optJSONObject("data")?.optJSONObject("biz_data")
         val paid = walletBalance(biz?.optJSONArray("normal_wallets"))
@@ -108,7 +119,7 @@ class WidgetRefreshWorker(
         val daily = if (monthDays > 0) month / monthDays else 0.0
         val daysLeft = if (daily > 0) balance / daily else 0.0
 
-        return JSONObject().apply {
+        JSONObject().apply {
             put("connected", true)
             put("balance", balance)
             put("granted", gift)
